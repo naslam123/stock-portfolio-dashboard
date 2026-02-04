@@ -211,9 +211,57 @@ def get_holdings():
             holdings[tk]["shares"] -= t["shares"]
     return {k: v for k, v in holdings.items() if v["shares"] > 0.001}
 
+def get_options_holdings():
+    """Calculate net options positions from all options trades."""
+    holdings = {}
+    for opt in st.session_state.data["options"]:
+        # Create unique key for each option contract
+        key = f"{opt['ticker']}_{opt['type']}_{opt['strike']}_{opt['expiration']}"
+        if key not in holdings:
+            holdings[key] = {
+                "ticker": opt["ticker"],
+                "type": opt["type"],
+                "strike": opt["strike"],
+                "expiration": opt["expiration"],
+                "contracts": 0,
+                "total_cost": 0
+            }
+        if "Buy" in opt["action"]:
+            holdings[key]["contracts"] += opt["contracts"]
+            holdings[key]["total_cost"] += opt["total"]
+        else:  # Sell to Close
+            holdings[key]["contracts"] -= opt["contracts"]
+    # Only return positions with contracts > 0
+    return {k: v for k, v in holdings.items() if v["contracts"] > 0}
+
+def get_option_current_price(ticker, expiration, strike, opt_type):
+    """Get current price for a specific option contract."""
+    try:
+        df = get_option_chain_data(ticker, expiration, opt_type.capitalize())
+        if not df.empty:
+            row = df[df["strike"] == strike]
+            if not row.empty:
+                # Use mid price between bid and ask
+                bid = row.iloc[0]["bid"]
+                ask = row.iloc[0]["ask"]
+                return (bid + ask) / 2 if bid > 0 and ask > 0 else row.iloc[0]["lastPrice"]
+    except:
+        pass
+    return 0
+
+def options_portfolio_value():
+    """Calculate total current value of all options positions."""
+    total = 0
+    for key, opt in get_options_holdings().items():
+        price = get_option_current_price(opt["ticker"], opt["expiration"], opt["strike"], opt["type"])
+        total += price * 100 * opt["contracts"]  # Each contract = 100 shares
+    return total
+
 def portfolio_value():
     h = get_holdings()
-    return st.session_state.data["cash"] + sum(get_price(t)[0] * v["shares"] for t, v in h.items())
+    stock_value = sum(get_price(t)[0] * v["shares"] for t, v in h.items())
+    options_value = options_portfolio_value()
+    return st.session_state.data["cash"] + stock_value + options_value
 
 # Sidebar
 with st.sidebar:
@@ -334,9 +382,10 @@ if page == "Portfolio":
         st.stop()
 
     holdings = get_holdings()
+    options_holdings = get_options_holdings()
 
-    if not holdings:
-        st.info("No holdings. Go to Trade to place your first order.")
+    if not holdings and not options_holdings:
+        st.info("No holdings. Go to Trade or Options to place your first order.")
     else:
         data = []
         total_val = 0
@@ -361,64 +410,109 @@ if page == "Portfolio":
             total_val += val
             total_cost += cost
 
-        total_account = st.session_state.data["cash"] + total_val
+        opts_val = options_portfolio_value()
+        total_account = st.session_state.data["cash"] + total_val + opts_val
         total_pl = total_account - st.session_state.data["starting_balance"]
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("Account", f"${total_account:,.0f}")
         c2.metric("Cash", f"${st.session_state.data['cash']:,.0f}")
-        c3.metric("Holdings", f"${total_val:,.0f}")
-        c4.metric("Total P/L", f"${total_pl:,.0f}", f"{total_pl/st.session_state.data['starting_balance']*100:+.1f}%")
-        c5.metric("Positions", len(holdings))
+        c3.metric("Stocks", f"${total_val:,.0f}")
+        c4.metric("Options", f"${opts_val:,.0f}")
+        c5.metric("Total P/L", f"${total_pl:,.0f}", f"{total_pl/st.session_state.data['starting_balance']*100:+.1f}%")
+        c6.metric("Positions", f"{len(holdings)} / {len(options_holdings)}")
 
         st.divider()
 
-        df = pd.DataFrame(data)
-        df_show = df.copy()
-        df_show["Shares"] = df_show["Shares"].apply(lambda x: f"{x:.2f}")
-        df_show["Avg Cost"] = df_show["Avg Cost"].apply(lambda x: f"${x:.2f}")
-        df_show["Price"] = df_show["Price"].apply(lambda x: f"${x:.2f}")
-        df_show["Value"] = df_show["Value"].apply(lambda x: f"${x:,.0f}")
-        df_show["P/L"] = df_show["P/L"].apply(lambda x: f"${x:+,.0f}")
-        df_show["P/L %"] = df_show["P/L %"].apply(lambda x: f"{x:+.1f}%")
+        # Stock Holdings Section
+        if holdings:
+            df = pd.DataFrame(data)
+            df_show = df.copy()
+            df_show["Shares"] = df_show["Shares"].apply(lambda x: f"{x:.2f}")
+            df_show["Avg Cost"] = df_show["Avg Cost"].apply(lambda x: f"${x:.2f}")
+            df_show["Price"] = df_show["Price"].apply(lambda x: f"${x:.2f}")
+            df_show["Value"] = df_show["Value"].apply(lambda x: f"${x:,.0f}")
+            df_show["P/L"] = df_show["P/L"].apply(lambda x: f"${x:+,.0f}")
+            df_show["P/L %"] = df_show["P/L %"].apply(lambda x: f"{x:+.1f}%")
 
-        col1, col2 = st.columns([2, 1])
+            col1, col2 = st.columns([2, 1])
 
-        with col1:
-            st.subheader("Holdings")
-            st.dataframe(df_show, use_container_width=True, hide_index=True)
+            with col1:
+                st.subheader("Stock Holdings")
+                st.dataframe(df_show, use_container_width=True, hide_index=True)
 
-        with col2:
-            st.subheader("Allocation")
-            labels = list(df["Ticker"]) + ["Cash"]
-            values = list(df["Value"]) + [st.session_state.data["cash"]]
+            with col2:
+                st.subheader("Allocation")
+                labels = list(df["Ticker"]) + ["Cash"]
+                values = list(df["Value"]) + [st.session_state.data["cash"]]
 
-            fig = go.Figure(data=[go.Pie(
-                labels=labels, values=values, hole=0.5,
-                marker=dict(colors=[BLUE, GREEN, "#a855f7", "#06b6d4", "#f59e0b", "#6b7280"][:len(labels)]),
-                textinfo="label+percent"
-            )])
-            fig.update_layout(height=300, margin=dict(t=0,b=0,l=0,r=0), showlegend=False,
-                            paper_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT2))
+                # Add options value to allocation if any
+                if opts_val > 0:
+                    labels.append("Options")
+                    values.append(opts_val)
+
+                fig = go.Figure(data=[go.Pie(
+                    labels=labels, values=values, hole=0.5,
+                    marker=dict(colors=[BLUE, GREEN, "#a855f7", "#06b6d4", "#f59e0b", "#6b7280"][:len(labels)]),
+                    textinfo="label+percent"
+                )])
+                fig.update_layout(height=300, margin=dict(t=0,b=0,l=0,r=0), showlegend=False,
+                                paper_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT2))
+                st.plotly_chart(fig, use_container_width=True)
+
+        # Options Positions Section
+        if options_holdings:
+            st.subheader("Options Positions")
+            opts_data = []
+            for key, opt in options_holdings.items():
+                current_price = get_option_current_price(opt["ticker"], opt["expiration"], opt["strike"], opt["type"])
+                current_value = current_price * 100 * opt["contracts"]
+                avg_cost = opt["total_cost"] / opt["contracts"] / 100 if opt["contracts"] > 0 else 0
+                pl = current_value - opt["total_cost"]
+                pl_pct = (pl / opt["total_cost"] * 100) if opt["total_cost"] > 0 else 0
+
+                opts_data.append({
+                    "Ticker": opt["ticker"],
+                    "Type": opt["type"].capitalize(),
+                    "Strike": f"${opt['strike']:.2f}",
+                    "Expiration": opt["expiration"],
+                    "Contracts": opt["contracts"],
+                    "Avg Cost": f"${avg_cost:.2f}",
+                    "Current": f"${current_price:.2f}",
+                    "Value": f"${current_value:,.2f}",
+                    "P/L": f"${pl:+,.2f}",
+                    "P/L %": f"{pl_pct:+.1f}%"
+                })
+
+            st.dataframe(pd.DataFrame(opts_data), use_container_width=True, hide_index=True)
+
+        # Performance chart (only if stock holdings exist)
+        if holdings:
+            st.subheader("Performance")
+            colors = [GREEN if x >= 0 else RED for x in df["P/L %"]]
+            fig = go.Figure(data=[go.Bar(x=df["Ticker"], y=df["P/L %"], marker_color=colors,
+                                         text=df["P/L %"].apply(lambda x: f"{x:+.1f}%"), textposition="outside")])
+            fig.update_layout(height=250, margin=dict(t=20,b=40,l=40,r=20),
+                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                             yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=True, zerolinecolor=BORDER),
+                             xaxis=dict(showgrid=False), font=dict(color=TEXT2))
             st.plotly_chart(fig, use_container_width=True)
 
-        st.subheader("Performance")
-        colors = [GREEN if x >= 0 else RED for x in df["P/L %"]]
-        fig = go.Figure(data=[go.Bar(x=df["Ticker"], y=df["P/L %"], marker_color=colors,
-                                     text=df["P/L %"].apply(lambda x: f"{x:+.1f}%"), textposition="outside")])
-        fig.update_layout(height=250, margin=dict(t=20,b=40,l=40,r=20),
-                         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                         yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=True, zerolinecolor=BORDER),
-                         xaxis=dict(showgrid=False), font=dict(color=TEXT2))
-        st.plotly_chart(fig, use_container_width=True)
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                st.download_button("Export CSV", df_show.to_csv(index=False), "portfolio.csv", use_container_width=True)
 
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            st.download_button("Export CSV", df_show.to_csv(index=False), "portfolio.csv", use_container_width=True)
-
-        with st.expander("Transaction History"):
+        with st.expander("Stock Transaction History"):
             if st.session_state.data["portfolio"]:
                 st.dataframe(pd.DataFrame(st.session_state.data["portfolio"]), use_container_width=True, hide_index=True)
+            else:
+                st.info("No stock transactions yet")
+
+        with st.expander("Options Transaction History"):
+            if st.session_state.data["options"]:
+                st.dataframe(pd.DataFrame(st.session_state.data["options"]), use_container_width=True, hide_index=True)
+            else:
+                st.info("No options transactions yet")
 
 # ==================== TRADE ====================
 elif page == "Trade":
