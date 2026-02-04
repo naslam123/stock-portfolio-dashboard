@@ -133,12 +133,24 @@ p, span, label {{
     border: 1px solid {BORDER} !important;
     color: {TEXT} !important;
 }}
+.stSelectbox input {{
+    color: {TEXT} !important;
+}}
+[data-testid="stTextInput"] input:disabled {{
+    color: {TEXT} !important;
+    -webkit-text-fill-color: {TEXT} !important;
+}}
 .stButton > button {{
+    background: {BG2} !important;
+    color: {TEXT} !important;
+    border: 1px solid {BORDER} !important;
+    border-radius: 6px !important;
+    padding: 8px 16px !important;
+}}
+.stButton > button[kind="primary"] {{
     background: {BLUE} !important;
     color: white !important;
     border: none !important;
-    border-radius: 6px !important;
-    padding: 8px 16px !important;
 }}
 hr {{
     border-color: {BORDER} !important;
@@ -270,14 +282,7 @@ with st.sidebar:
 
     st.divider()
 
-    # Dark mode toggle - properly aligned
-    st.markdown(f"""
-    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0;">
-        <span style="color:{TEXT}; font-size:14px;">Dark Mode</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    new_dark = st.checkbox("Enable", value=dark, key="dark_toggle", label_visibility="collapsed")
+    new_dark = st.toggle("Dark Mode", value=dark, key="dark_toggle")
 
     # Only update if changed AND different from current
     if new_dark and st.session_state.data["theme"] != "dark":
@@ -287,6 +292,13 @@ with st.sidebar:
     elif not new_dark and st.session_state.data["theme"] != "light":
         st.session_state.data["theme"] = "light"
         save_data()
+        st.rerun()
+
+    st.divider()
+
+    # Refresh button (styled to match background)
+    if st.button("🔄 Refresh Prices", use_container_width=True, key="refresh_btn"):
+        st.cache_data.clear()
         st.rerun()
 
     st.divider()
@@ -319,28 +331,37 @@ def show_trade_dialog():
         commission = st.session_state.data["commission_stock"] if st.session_state.data["commission_enabled"] else 0
         total_cost = t["shares"] * t["price"] + commission
 
-        st.markdown(f"""
-        <div style="background:{BG2}; border:2px solid {YELLOW}; border-radius:12px; padding:24px; margin:20px 0;">
-            <h3 style="color:{YELLOW}; margin-bottom:16px;">⚠️ Confirm Order</h3>
-            <p style="color:{TEXT}; font-size:16px;"><strong>{t['action'].upper()}</strong> {t['shares']:.2f} shares of <strong>{t['ticker']}</strong></p>
-            <p style="color:{TEXT};">Price: ${t['price']:.2f}</p>
-            <p style="color:{TEXT};">Commission: ${commission:.2f}</p>
-            <p style="color:{TEXT}; font-size:18px; margin-top:12px;"><strong>Total: ${total_cost:,.2f}</strong></p>
-        </div>
-        """, unsafe_allow_html=True)
+        _, center_col, _ = st.columns([1, 2, 1])
+        with center_col:
+            st.markdown(f"""
+            <div style="background:{BG}; border:1px solid {BORDER}; border-radius:12px; padding:24px; box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+                <div style="color:{TEXT}; font-size:16px; font-weight:bold; margin-bottom:16px; text-align:center;">Confirm Order</div>
+                <div style="color:{TEXT}; font-size:14px; margin-bottom:12px; text-align:center;">
+                    <strong>{t['action'].upper()}</strong> {t['shares']:.2f} × <strong>{t['ticker']}</strong>
+                </div>
+                <div style="color:{TEXT2}; font-size:13px; text-align:center;">@ ${t['price']:.2f}</div>
+                <hr style="border-color:{BORDER}; margin:16px 0;">
+                <div style="display:flex; justify-content:space-between; color:{TEXT2}; font-size:13px; margin-bottom:8px;">
+                    <span>Commission</span><span>${commission:.2f}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; color:{TEXT}; font-size:15px; font-weight:bold;">
+                    <span>Total</span><span>${total_cost:,.2f}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("✓ CONFIRM", type="primary", use_container_width=True):
-                execute_trade(t)
-                st.session_state.show_confirm = False
-                st.session_state.pending_trade = None
-                st.rerun()
-        with col2:
-            if st.button("✕ CANCEL", use_container_width=True):
-                st.session_state.show_confirm = False
-                st.session_state.pending_trade = None
-                st.rerun()
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("✓ Confirm", use_container_width=True, key="confirm_trade"):
+                    execute_trade(t)
+                    st.session_state.show_confirm = False
+                    st.session_state.pending_trade = None
+                    st.rerun()
+            with btn_col2:
+                if st.button("✕ Cancel", use_container_width=True, key="cancel_trade"):
+                    st.session_state.show_confirm = False
+                    st.session_state.pending_trade = None
+                    st.rerun()
         return True
     return False
 
@@ -452,12 +473,25 @@ if page == "Portfolio":
                     values.append(opts_val)
 
                 fig = go.Figure(data=[go.Pie(
-                    labels=labels, values=values, hole=0.5,
-                    marker=dict(colors=[BLUE, GREEN, "#a855f7", "#06b6d4", "#f59e0b", "#6b7280"][:len(labels)]),
-                    textinfo="label+percent"
+                    labels=labels, values=values, hole=0.4,
+                    marker=dict(
+                        colors=["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"][:len(labels)],
+                        line=dict(color='#ffffff', width=2)
+                    ),
+                    textinfo="label+percent",
+                    textfont=dict(size=12, color="white"),
+                    pull=[0.05] * len(labels),
+                    rotation=45,
+                    direction="clockwise"
                 )])
-                fig.update_layout(height=300, margin=dict(t=0,b=0,l=0,r=0), showlegend=False,
-                                paper_bgcolor="rgba(0,0,0,0)", font=dict(color=TEXT2))
+                fig.update_layout(
+                    height=320,
+                    margin=dict(t=10,b=10,l=10,r=10),
+                    showlegend=False,
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font=dict(color=TEXT2),
+                    annotations=[dict(text='Portfolio', x=0.5, y=0.5, font_size=14, font_color=TEXT, showarrow=False)]
+                )
                 st.plotly_chart(fig, use_container_width=True)
 
         # Options Positions Section
@@ -486,17 +520,64 @@ if page == "Portfolio":
 
             st.dataframe(pd.DataFrame(opts_data), use_container_width=True, hide_index=True)
 
-        # Performance chart (only if stock holdings exist)
+        # Performance charts (only if stock holdings exist)
         if holdings:
             st.subheader("Performance")
-            colors = [GREEN if x >= 0 else RED for x in df["P/L %"]]
-            fig = go.Figure(data=[go.Bar(x=df["Ticker"], y=df["P/L %"], marker_color=colors,
-                                         text=df["P/L %"].apply(lambda x: f"{x:+.1f}%"), textposition="outside")])
-            fig.update_layout(height=250, margin=dict(t=20,b=40,l=40,r=20),
-                             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                             yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=True, zerolinecolor=BORDER),
-                             xaxis=dict(showgrid=False), font=dict(color=TEXT2))
-            st.plotly_chart(fig, use_container_width=True)
+            perf_col1, perf_col2 = st.columns(2)
+
+            with perf_col1:
+                # Bar chart - P/L %
+                blues = ["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"]
+                fig1 = go.Figure(data=[go.Bar(
+                    x=df["Ticker"], y=df["P/L %"],
+                    marker=dict(
+                        color=blues[:len(df)],
+                        line=dict(width=1, color='rgba(255,255,255,0.3)')
+                    ),
+                    text=df["P/L %"].apply(lambda x: f"{x:+.1f}%"),
+                    textposition="outside",
+                    textfont=dict(size=11, color=TEXT)
+                )])
+                fig1.update_layout(
+                    title=dict(text="Return %", font=dict(size=14, color=TEXT)),
+                    height=280,
+                    margin=dict(t=40,b=40,l=40,r=20),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    yaxis=dict(showgrid=True, gridcolor=BORDER, zeroline=True, zerolinecolor=TEXT2, zerolinewidth=2),
+                    xaxis=dict(showgrid=False),
+                    font=dict(color=TEXT2),
+                    bargap=0.3
+                )
+                st.plotly_chart(fig1, use_container_width=True)
+
+            with perf_col2:
+                # Portfolio Summary
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:20px; height:260px;">
+                    <div style="color:{TEXT}; font-size:14px; font-weight:bold; margin-bottom:16px;">Portfolio Summary</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+                        <span style="color:{TEXT2};">Total Invested</span>
+                        <span style="color:{TEXT};">${total_cost:,.2f}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+                        <span style="color:{TEXT2};">Current Value</span>
+                        <span style="color:{TEXT};">${total_val:,.2f}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+                        <span style="color:{TEXT2};">Total P/L</span>
+                        <span style="color:{GREEN if (total_val - total_cost) >= 0 else RED};">${total_val - total_cost:+,.2f}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+                        <span style="color:{TEXT2};">Return</span>
+                        <span style="color:{GREEN if (total_val - total_cost) >= 0 else RED};">{((total_val - total_cost) / total_cost * 100) if total_cost > 0 else 0:+.2f}%</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <span style="color:{TEXT2};">Positions</span>
+                        <span style="color:{TEXT};">{len(holdings)}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
             col1, col2, col3 = st.columns([1, 1, 2])
             with col1:
@@ -619,8 +700,6 @@ elif page == "Trade":
                     }
                     st.session_state.show_confirm = True
                     st.rerun()
-        else:
-            st.info("Search for a stock to trade")
 
 # ==================== OPTIONS ====================
 elif page == "Options":
@@ -827,6 +906,33 @@ elif page == "Research":
                              font=dict(color=TEXT2), hovermode="x unified",
                              legend=dict(orientation="h", y=1.1))
             st.plotly_chart(fig, use_container_width=True)
+
+            # Latest News
+            st.divider()
+            st.subheader("Latest News")
+
+            # Direct links to financial news
+            company_name = info.get('shortName', ticker).replace(' ', '+')
+            st.markdown(f"""
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                <a href="https://finance.yahoo.com/quote/{ticker}/news" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
+                    📰 {ticker} News on Yahoo Finance
+                </a>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">Latest news and updates</div>
+            </div>
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                <a href="https://www.wsj.com/search?query={ticker}" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
+                    📰 {ticker} on Wall Street Journal
+                </a>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">WSJ coverage and analysis</div>
+            </div>
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                <a href="https://www.google.com/search?q={ticker}+{company_name}+stock+news&tbm=nws" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
+                    📰 {ticker} on Google News
+                </a>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">All recent news articles</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 # ==================== ANALYTICS ====================
 elif page == "Analytics":
