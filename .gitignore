@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+portfolio_data.json
+.env
+venv/
+.venv/
