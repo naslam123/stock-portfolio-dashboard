@@ -919,8 +919,8 @@ elif page == "Trade":
                         <div style="color:{TEXT2};">{SP500.get(ticker, '')}</div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="font-size:1.41rem; font-weight:bold; color:{TEXT};">${price:.2f}</div>
-                        <div style="color:{chg_color}; font-size:0.88em;">{chg:+.2f} ({pct:+.2f}%)</div>
+                        <div style="font-size:1.5rem; font-weight:bold; color:{TEXT};">${price:.2f}</div>
+                        <div style="color:{chg_color}; font-size:0.95em;">{chg:+.2f} ({pct:+.2f}%)</div>
                     </div>
                 </div>
             </div>
