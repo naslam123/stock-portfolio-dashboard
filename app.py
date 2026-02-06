@@ -248,27 +248,63 @@ section[data-testid="stSidebar"] > div {{
     margin-left: 0 !important;
 }}
 
-/* Menu item hover and active states */
+/* Menu item styling - matching reference design */
+section[data-testid="stSidebar"] .stRadio > div {{
+    margin: 4px 0 !important;
+}}
+
 section[data-testid="stSidebar"] .stRadio > div > label {{
     color: {TEXT_INACTIVE} !important;
-    transition: all 0.15s ease !important;
-    border-radius: 8px !important;
-    padding: 8px 12px !important;
-    margin: 2px 0 !important;
+    transition: all 0.18s ease !important;
+    border-radius: 10px !important;
+    padding: 10px 16px !important;
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    font-size: 0.95rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
 }}
 
 section[data-testid="stSidebar"] .stRadio > div > label:hover {{
     background: {HOVER_BG} !important;
     color: {TEXT} !important;
-    transition: all 0.18s ease !important; /* 150-200ms range */
+    transition: all 0.18s ease !important;
 }}
 
-/* Active menu item styling */
+/* Active menu item styling - exact match to reference */
 section[data-testid="stSidebar"] .stRadio input:checked + label,
 section[data-testid="stSidebar"] .stRadio input[checked] + label {{
     background: {ACTIVE_BG} !important;
     color: {ACTIVE_TEXT if not dark else TEXT} !important;
     font-weight: 600 !important;
+    border-radius: 10px !important;
+}}
+
+/* Sidebar header styling */
+section[data-testid="stSidebar"] h2 {{
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    margin-bottom: 0.5rem !important;
+    color: {TEXT} !important;
+}}
+
+section[data-testid="stSidebar"] .stCaption {{
+    color: {TEXT2} !important;
+    font-size: 0.85rem !important;
+    margin-bottom: 1.5rem !important;
+}}
+
+/* Sidebar dividers */
+section[data-testid="stSidebar"] hr {{
+    margin: 1.5rem 0 !important;
+    border-color: {BORDER} !important;
+    opacity: 0.5 !important;
+}}
+
+/* Sidebar spacing improvements */
+section[data-testid="stSidebar"] > div {{
+    padding: 1.5rem 1rem !important;
 }}
 h1, h2, h3 {{
     color: {TEXT} !important;
@@ -565,10 +601,15 @@ def portfolio_value():
     options_value = options_portfolio_value()
     return st.session_state.data["cash"] + stock_value + options_value
 
-# Sidebar
+# Sidebar - Updated to match reference design
 with st.sidebar:
-    st.markdown(f"<h2 style='text-align:center; color:{TEXT};'>Trading Simulator</h2>", unsafe_allow_html=True)
-    st.caption("MGMT 590 | Purdue University")
+    # Header section
+    st.markdown(f"""
+    <div style="margin-bottom: 2rem;">
+        <h2 style="color: {TEXT}; font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem;">Trading Simulator</h2>
+        <p style="color: {TEXT2}; font-size: 0.85rem; margin: 0;">MGMT 590 | Purdue University</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.divider()
 
