@@ -82,9 +82,9 @@ dark = theme == "dark"
 
 # Updated color scheme matching requirements
 if dark:
-    # Dark Mode Colors
+    # Dark Mode Colors - EXACT
     BG = "#0F172A"  # Very dark blue/black
-    BG2 = "#1E293B"  # Darker blue (sidebar)
+    BG2 = "#1E293B"  # Darker blue (sidebar) - can also use #334155
     TEXT = "#FFFFFF"  # White (primary text)
     TEXT2 = "#CBD5E1"  # Light gray (secondary text)
     TEXT_INACTIVE = "#94A3B8"  # Gray (inactive menu items)
@@ -92,13 +92,13 @@ if dark:
     ACCENT = "#A855F7"  # Purple accent
     ACCENT_ALT = "#3B82F6"  # Blue accent alternative
     ACTIVE_BG = "rgba(255, 255, 255, 0.1)"  # Slightly lighter background for active
-    HOVER_BG = "rgba(255, 255, 255, 0.05)"  # Hover background
+    HOVER_BG = "rgba(255, 255, 255, 0.05)"  # Hover background - slightly lighter
     GREEN = "#3fb950"
     RED = "#f85149"
     BLUE = "#3B82F6"
     YELLOW = "#d29922"
 else:
-    # Light Mode Colors
+    # Light Mode Colors - EXACT
     BG = "#FFFFFF"  # White background
     BG2 = "#F5F5F7"  # Light gray sidebar
     TEXT = "#1F2937"  # Dark gray/black (primary text)
@@ -260,7 +260,7 @@ section[data-testid="stSidebar"] .stRadio > div > label {{
 section[data-testid="stSidebar"] .stRadio > div > label:hover {{
     background: {HOVER_BG} !important;
     color: {TEXT} !important;
-    transition: all 0.15s ease !important;
+    transition: all 0.18s ease !important; /* 150-200ms range */
 }}
 
 /* Active menu item styling */
@@ -276,29 +276,22 @@ h1, h2, h3 {{
 p, span, label {{
     color: {TEXT} !important;
 }}
-/* Reduce ALL numeric values by 12% (10-15% range) */
+/* Numeric values - INCREASED from previous reduction */
 [data-testid="stMetricValue"],
 .stMetricValue,
 .numeric-value,
 /* Numbers in tables */
-.stDataFrame td:has-text("$"),
-.stDataFrame td:has-text("%"),
-/* Price displays */
-div:has-text("$"):not([class*="label"]),
-span:has-text("$"):not([class*="label"]),
-/* Percentages */
-div:has-text("%"):not([class*="label"]),
-span:has-text("%"):not([class*="label"]),
+.stDataFrame td,
 /* All numbers in sidebar */
 section[data-testid="stSidebar"] [data-testid="stMetricValue"],
 section[data-testid="stSidebar"] .stMetricValue {{
-    font-size: 0.88em !important; /* 12% reduction (1 - 0.12 = 0.88) */
+    font-size: 0.95em !important; /* Increased from 0.88em (was 12% reduction, now only 5% reduction) */
 }}
 
-/* Smaller font sizes for numbers in sidebar */
+/* Smaller font sizes for numbers in sidebar - INCREASED */
 section[data-testid="stSidebar"] [data-testid="stMetricValue"] {{
     color: {TEXT} !important;
-    font-size: 0.75rem !important; /* Already reduced, further reduced for sidebar */
+    font-size: 0.85rem !important; /* Increased from 0.75rem */
     font-weight: 600 !important;
     line-height: 1.3 !important;
     word-break: break-word !important;
@@ -317,25 +310,19 @@ section[data-testid="stSidebar"] [data-testid="stMetricContainer"] {{
     margin: 0.25rem 0 !important;
 }}
 
-/* General metric styling (for main content area) */
+/* General metric styling (for main content area) - INCREASED */
 [data-testid="stMetricValue"] {{
     color: {TEXT} !important;
-    font-size: 0.88em !important; /* 12% reduction */
+    font-size: 0.95em !important; /* Increased from 0.88em */
 }}
 
 [data-testid="stMetricLabel"] {{
     color: {TEXT2} !important;
 }}
 
-/* Reduce numeric values in all text content */
+/* Numeric values in all text content - INCREASED */
 .stDataFrame td {{
-    font-size: 0.88em !important;
-}}
-
-/* Numbers in price displays and calculations */
-div[style*="font-size"]:has-text("$"),
-span[style*="font-size"]:has-text("$") {{
-    font-size: 0.88em !important;
+    font-size: 0.95em !important; /* Increased from 0.88em */
 }}
 
 /* Reduce font size for numbers in sidebar text */
@@ -1027,8 +1014,8 @@ elif page == "Options":
         <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px; margin:16px 0;">
             <span style="font-size:1.3rem; font-weight:bold; color:{TEXT};">{ticker}</span>
             <span style="color:{TEXT2}; margin-left:12px;">{SP500.get(ticker, '')}</span>
-            <span style="float:right; font-size:1.06rem; font-weight:bold; color:{TEXT};">${price:.2f}</span>
-            <span style="float:right; color:{chg_color}; margin-right:12px; font-size:0.88em;">{pct:+.2f}%</span>
+            <span style="float:right; font-size:1.15rem; font-weight:bold; color:{TEXT};">${price:.2f}</span>
+            <span style="float:right; color:{chg_color}; margin-right:12px; font-size:0.95em;">{pct:+.2f}%</span>
         </div>
         """, unsafe_allow_html=True)
 
