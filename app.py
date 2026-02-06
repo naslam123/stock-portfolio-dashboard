@@ -102,14 +102,69 @@ else:
     BLUE = "#0969da"
     YELLOW = "#9a6700"
 
+# Gold and Black gradient styling
+if dark:
+    # Main background - light gradient from black to dark gold
+    gradient_bg = "linear-gradient(135deg, #000000 0%, #1a1a1a 25%, #2d2415 50%, #1a1a1a 75%, #000000 100%)"
+    # Sidebar gradient - gold hues
+    sidebar_gradient = "linear-gradient(180deg, #1a1612 0%, #2d2415 15%, #3d2e1a 30%, #4a3a20 45%, #5a4a2a 50%, #4a3a20 65%, #3d2e1a 80%, #2d2415 100%)"
+else:
+    # Light mode - subtle gold and black
+    gradient_bg = "linear-gradient(135deg, #f5f5f0 0%, #e8e0d0 30%, #f5f5f0 60%, #e8e0d0 100%)"
+    sidebar_gradient = "linear-gradient(180deg, #faf8f3 0%, #f5f0e8 20%, #ede5d5 40%, #e8dcc5 50%, #ede5d5 60%, #f5f0e8 80%, #faf8f3 100%)"
+
 # CSS
 st.markdown(f"""
 <style>
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
+/* Gold and Black gradient background */
+.stApp, [data-testid="stAppViewContainer"] {{
+    background: {gradient_bg} !important;
+    background-attachment: fixed !important;
+    position: relative !important;
+    min-height: 100vh !important;
+}}
+
+/* Subtle gold overlay for depth */
+.stApp::before {{
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 30% 40%, rgba(212, 175, 55, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(184, 134, 11, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}}
+
+[data-testid="stHeader"] {{
     background: {BG} !important;
 }}
+
+/* Gold gradient sidebar with increased width */
+section[data-testid="stSidebar"] {{
+    min-width: 320px !important;
+    width: 320px !important;
+}}
+
 section[data-testid="stSidebar"] > div {{
-    background: {BG2} !important;
+    background: {sidebar_gradient} !important;
+    border-right: 2px solid rgba(212, 175, 55, 0.3) !important;
+    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
+    position: relative !important;
+}}
+
+/* Gold accent border on sidebar */
+section[data-testid="stSidebar"] > div::after {{
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg, rgba(212, 175, 55, 0.5) 0%, rgba(184, 134, 11, 0.7) 50%, rgba(212, 175, 55, 0.5) 100%);
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.3);
 }}
 h1, h2, h3 {{
     color: {TEXT} !important;
