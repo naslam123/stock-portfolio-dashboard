@@ -194,11 +194,49 @@ h1, h2, h3 {{
 p, span, label {{
     color: {TEXT} !important;
 }}
+/* Smaller font sizes for numbers in sidebar */
+section[data-testid="stSidebar"] [data-testid="stMetricValue"] {{
+    color: {TEXT} !important;
+    font-size: 0.8rem !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+}}
+
+section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {{
+    color: {TEXT2} !important;
+    font-size: 0.7rem !important;
+    line-height: 1.3 !important;
+}}
+
+/* Ensure metric containers in sidebar are compact */
+section[data-testid="stSidebar"] [data-testid="stMetricContainer"] {{
+    padding: 0.25rem 0 !important;
+    margin: 0.25rem 0 !important;
+}}
+
+/* General metric styling (for main content area) */
 [data-testid="stMetricValue"] {{
     color: {TEXT} !important;
 }}
+
 [data-testid="stMetricLabel"] {{
     color: {TEXT2} !important;
+}}
+
+/* Reduce font size for numbers in sidebar text */
+section[data-testid="stSidebar"] .stNumberInput input,
+section[data-testid="stSidebar"] .stTextInput input {{
+    font-size: 0.85rem !important;
+}}
+
+/* Smaller text in sidebar overall */
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] div {{
+    font-size: 0.9rem !important;
 }}
 .stTextInput input, .stNumberInput input {{
     background: {BG2} !important;
