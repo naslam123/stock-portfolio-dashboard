@@ -142,17 +142,39 @@ st.markdown(f"""
     background: {BG} !important;
 }}
 
-/* Gold gradient sidebar with increased width */
+/* Gold gradient sidebar - expandable but with minimum width */
 section[data-testid="stSidebar"] {{
-    min-width: 320px !important;
+    min-width: 280px !important;
+    max-width: 400px !important;
     width: 320px !important;
+    transition: width 0.3s ease !important;
 }}
 
+/* Prevent sidebar from being completely closed - always show minimum width */
+section[data-testid="stSidebar"][aria-expanded="false"] {{
+    min-width: 280px !important;
+    width: 280px !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}}
+
+/* Ensure sidebar content is always visible */
 section[data-testid="stSidebar"] > div {{
     background: {sidebar_gradient} !important;
     border-right: 2px solid rgba(212, 175, 55, 0.3) !important;
     box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
     position: relative !important;
+    min-width: 280px !important;
+    width: 100% !important;
+    display: block !important;
+    visibility: visible !important;
+}}
+
+/* Prevent the sidebar from being hidden completely */
+[data-testid="stSidebar"] {{
+    transform: translateX(0) !important;
+    margin-left: 0 !important;
 }}
 
 /* Gold accent border on sidebar */
