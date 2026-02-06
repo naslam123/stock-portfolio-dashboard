@@ -80,57 +80,69 @@ if "data" not in st.session_state:
 theme = st.session_state.data.get("theme", "dark")
 dark = theme == "dark"
 
-# Simple color scheme
+# Updated color scheme matching requirements
 if dark:
-    BG = "#0d1117"
-    BG2 = "#161b22"
-    TEXT = "#ffffff"
-    TEXT2 = "#8b949e"
-    BORDER = "#30363d"
+    # Dark Mode Colors
+    BG = "#0F172A"  # Very dark blue/black
+    BG2 = "#1E293B"  # Darker blue (sidebar)
+    TEXT = "#FFFFFF"  # White (primary text)
+    TEXT2 = "#CBD5E1"  # Light gray (secondary text)
+    TEXT_INACTIVE = "#94A3B8"  # Gray (inactive menu items)
+    BORDER = "#334155"
+    ACCENT = "#A855F7"  # Purple accent
+    ACCENT_ALT = "#3B82F6"  # Blue accent alternative
+    ACTIVE_BG = "rgba(255, 255, 255, 0.1)"  # Slightly lighter background for active
+    HOVER_BG = "rgba(255, 255, 255, 0.05)"  # Hover background
     GREEN = "#3fb950"
     RED = "#f85149"
-    BLUE = "#58a6ff"
+    BLUE = "#3B82F6"
     YELLOW = "#d29922"
 else:
-    BG = "#ffffff"
-    BG2 = "#f6f8fa"
-    TEXT = "#24292f"
-    TEXT2 = "#57606a"
-    BORDER = "#d0d7de"
+    # Light Mode Colors
+    BG = "#FFFFFF"  # White background
+    BG2 = "#F5F5F7"  # Light gray sidebar
+    TEXT = "#1F2937"  # Dark gray/black (primary text)
+    TEXT2 = "#6B7280"  # Medium gray (secondary text)
+    TEXT_INACTIVE = "#6B7280"  # Gray (inactive menu items)
+    BORDER = "#E5E7EB"
+    ACCENT = "#A855F7"  # Purple accent
+    ACCENT_ALT = "#A855F7"
+    ACTIVE_BG = "#F3E8FF"  # Light purple background for active
+    ACTIVE_TEXT = "#A855F7"  # Purple text for active
+    HOVER_BG = "#F3F4F6"  # Subtle gray on hover
     GREEN = "#1a7f37"
     RED = "#cf222e"
-    BLUE = "#0969da"
+    BLUE = "#A855F7"
     YELLOW = "#9a6700"
 
-# Gold and Black gradient styling
+# Updated gradient styling with new color scheme
 if dark:
-    # Main background - light gradient from black to dark gold (base, will be animated)
-    gradient_bg = "linear-gradient(135deg, #000000 0%, #1a1a1a 25%, #2d2415 50%, #1a1a1a 75%, #000000 100%)"
-    # Sidebar gradient - gold hues
-    sidebar_gradient = "linear-gradient(180deg, #1a1612 0%, #2d2415 15%, #3d2e1a 30%, #4a3a20 45%, #5a4a2a 50%, #4a3a20 65%, #3d2e1a 80%, #2d2415 100%)"
+    # Dark mode gradient
+    gradient_bg = "linear-gradient(135deg, #0F172A 0%, #1E293B 25%, #334155 50%, #1E293B 75%, #0F172A 100%)"
+    sidebar_gradient = BG2  # Use solid sidebar background
     # Animated gradient colors for dark mode
     gradient_colors = {
-        'color1': '#000000',
-        'color2': '#1a1a1a', 
-        'color3': '#2d2415',
-        'color4': '#3d2e1a',
-        'color5': '#4a3a20',
-        'accent1': '#d4af37',
-        'accent2': '#b8860b'
+        'color1': '#0F172A',
+        'color2': '#1E293B', 
+        'color3': '#334155',
+        'color4': '#475569',
+        'color5': '#334155',
+        'accent1': '#A855F7',
+        'accent2': '#3B82F6'
     }
 else:
-    # Light mode - subtle gold and black
-    gradient_bg = "linear-gradient(135deg, #f5f5f0 0%, #e8e0d0 30%, #f5f5f0 60%, #e8e0d0 100%)"
-    sidebar_gradient = "linear-gradient(180deg, #faf8f3 0%, #f5f0e8 20%, #ede5d5 40%, #e8dcc5 50%, #ede5d5 60%, #f5f0e8 80%, #faf8f3 100%)"
+    # Light mode gradient
+    gradient_bg = "linear-gradient(135deg, #FFFFFF 0%, #F5F5F7 30%, #FFFFFF 60%, #F5F5F7 100%)"
+    sidebar_gradient = BG2  # Use solid sidebar background
     # Animated gradient colors for light mode
     gradient_colors = {
-        'color1': '#f5f5f0',
-        'color2': '#e8e0d0',
-        'color3': '#ede5d5',
-        'color4': '#e8dcc5',
-        'color5': '#f5f0e8',
-        'accent1': '#d4af37',
-        'accent2': '#b8860b'
+        'color1': '#FFFFFF',
+        'color2': '#F5F5F7',
+        'color3': '#F9FAFB',
+        'color4': '#F3F4F6',
+        'color5': '#F5F5F7',
+        'accent1': '#A855F7',
+        'accent2': '#A855F7'
     }
 
 # CSS
@@ -169,7 +181,7 @@ st.markdown(f"""
     will-change: background-position;
 }}
 
-/* Animated overlay with gold accents */
+/* Animated overlay with purple accents */
 .stApp::after {{
     content: '';
     position: fixed;
@@ -178,9 +190,9 @@ st.markdown(f"""
     width: 100%;
     height: 200%;
     background: 
-        radial-gradient(circle at 20% 30%, rgba(212, 175, 55, 0.08) 0%, transparent 40%),
-        radial-gradient(circle at 80% 70%, rgba(184, 134, 11, 0.06) 0%, transparent 40%),
-        radial-gradient(circle at 50% 50%, rgba(212, 175, 55, 0.04) 0%, transparent 50%);
+        radial-gradient(circle at 20% 30%, rgba(168, 85, 247, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.04) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(168, 85, 247, 0.03) 0%, transparent 50%);
     background-size: 100% 200%;
     background-position: 0% 0%;
     pointer-events: none;
@@ -197,9 +209,10 @@ st.markdown(f"""
 
 [data-testid="stHeader"] {{
     background: {BG} !important;
+    border-bottom: 1px solid {BORDER} !important;
 }}
 
-/* Gold gradient sidebar - expandable but with minimum width */
+/* Updated sidebar styling with new color scheme */
 section[data-testid="stSidebar"] {{
     min-width: 280px !important;
     max-width: 400px !important;
@@ -218,14 +231,15 @@ section[data-testid="stSidebar"][aria-expanded="false"] {{
 
 /* Ensure sidebar content is always visible */
 section[data-testid="stSidebar"] > div {{
-    background: {sidebar_gradient} !important;
-    border-right: 2px solid rgba(212, 175, 55, 0.3) !important;
-    box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3) !important;
+    background: {BG2} !important;
+    border-right: 1px solid {BORDER} !important;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.05) !important;
     position: relative !important;
     min-width: 280px !important;
     width: 100% !important;
     display: block !important;
     visibility: visible !important;
+    transition: all 0.2s ease !important;
 }}
 
 /* Prevent the sidebar from being hidden completely */
@@ -234,16 +248,27 @@ section[data-testid="stSidebar"] > div {{
     margin-left: 0 !important;
 }}
 
-/* Gold accent border on sidebar */
-section[data-testid="stSidebar"] > div::after {{
-    content: '';
-    position: absolute;
-    right: 0;
-    top: 0;
-    width: 3px;
-    height: 100%;
-    background: linear-gradient(180deg, rgba(212, 175, 55, 0.5) 0%, rgba(184, 134, 11, 0.7) 50%, rgba(212, 175, 55, 0.5) 100%);
-    box-shadow: 0 0 8px rgba(212, 175, 55, 0.3);
+/* Menu item hover and active states */
+section[data-testid="stSidebar"] .stRadio > div > label {{
+    color: {TEXT_INACTIVE} !important;
+    transition: all 0.15s ease !important;
+    border-radius: 8px !important;
+    padding: 8px 12px !important;
+    margin: 2px 0 !important;
+}}
+
+section[data-testid="stSidebar"] .stRadio > div > label:hover {{
+    background: {HOVER_BG} !important;
+    color: {TEXT} !important;
+    transition: all 0.15s ease !important;
+}}
+
+/* Active menu item styling */
+section[data-testid="stSidebar"] .stRadio input:checked + label,
+section[data-testid="stSidebar"] .stRadio input[checked] + label {{
+    background: {ACTIVE_BG} !important;
+    color: {ACTIVE_TEXT if not dark else TEXT} !important;
+    font-weight: 600 !important;
 }}
 h1, h2, h3 {{
     color: {TEXT} !important;
@@ -251,10 +276,29 @@ h1, h2, h3 {{
 p, span, label {{
     color: {TEXT} !important;
 }}
+/* Reduce ALL numeric values by 12% (10-15% range) */
+[data-testid="stMetricValue"],
+.stMetricValue,
+.numeric-value,
+/* Numbers in tables */
+.stDataFrame td:has-text("$"),
+.stDataFrame td:has-text("%"),
+/* Price displays */
+div:has-text("$"):not([class*="label"]),
+span:has-text("$"):not([class*="label"]),
+/* Percentages */
+div:has-text("%"):not([class*="label"]),
+span:has-text("%"):not([class*="label"]),
+/* All numbers in sidebar */
+section[data-testid="stSidebar"] [data-testid="stMetricValue"],
+section[data-testid="stSidebar"] .stMetricValue {{
+    font-size: 0.88em !important; /* 12% reduction (1 - 0.12 = 0.88) */
+}}
+
 /* Smaller font sizes for numbers in sidebar */
 section[data-testid="stSidebar"] [data-testid="stMetricValue"] {{
     color: {TEXT} !important;
-    font-size: 0.8rem !important;
+    font-size: 0.75rem !important; /* Already reduced, further reduced for sidebar */
     font-weight: 600 !important;
     line-height: 1.3 !important;
     word-break: break-word !important;
@@ -276,10 +320,22 @@ section[data-testid="stSidebar"] [data-testid="stMetricContainer"] {{
 /* General metric styling (for main content area) */
 [data-testid="stMetricValue"] {{
     color: {TEXT} !important;
+    font-size: 0.88em !important; /* 12% reduction */
 }}
 
 [data-testid="stMetricLabel"] {{
     color: {TEXT2} !important;
+}}
+
+/* Reduce numeric values in all text content */
+.stDataFrame td {{
+    font-size: 0.88em !important;
+}}
+
+/* Numbers in price displays and calculations */
+div[style*="font-size"]:has-text("$"),
+span[style*="font-size"]:has-text("$") {{
+    font-size: 0.88em !important;
 }}
 
 /* Reduce font size for numbers in sidebar text */
@@ -876,8 +932,8 @@ elif page == "Trade":
                         <div style="color:{TEXT2};">{SP500.get(ticker, '')}</div>
                     </div>
                     <div style="text-align:right;">
-                        <div style="font-size:1.6rem; font-weight:bold; color:{TEXT};">${price:.2f}</div>
-                        <div style="color:{chg_color};">{chg:+.2f} ({pct:+.2f}%)</div>
+                        <div style="font-size:1.41rem; font-weight:bold; color:{TEXT};">${price:.2f}</div>
+                        <div style="color:{chg_color}; font-size:0.88em;">{chg:+.2f} ({pct:+.2f}%)</div>
                     </div>
                 </div>
             </div>
@@ -971,8 +1027,8 @@ elif page == "Options":
         <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px; margin:16px 0;">
             <span style="font-size:1.3rem; font-weight:bold; color:{TEXT};">{ticker}</span>
             <span style="color:{TEXT2}; margin-left:12px;">{SP500.get(ticker, '')}</span>
-            <span style="float:right; font-size:1.2rem; font-weight:bold; color:{TEXT};">${price:.2f}</span>
-            <span style="float:right; color:{chg_color}; margin-right:12px;">{pct:+.2f}%</span>
+            <span style="float:right; font-size:1.06rem; font-weight:bold; color:{TEXT};">${price:.2f}</span>
+            <span style="float:right; color:{chg_color}; margin-right:12px; font-size:0.88em;">{pct:+.2f}%</span>
         </div>
         """, unsafe_allow_html=True)
 
