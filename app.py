@@ -104,38 +104,95 @@ else:
 
 # Gold and Black gradient styling
 if dark:
-    # Main background - light gradient from black to dark gold
+    # Main background - light gradient from black to dark gold (base, will be animated)
     gradient_bg = "linear-gradient(135deg, #000000 0%, #1a1a1a 25%, #2d2415 50%, #1a1a1a 75%, #000000 100%)"
     # Sidebar gradient - gold hues
     sidebar_gradient = "linear-gradient(180deg, #1a1612 0%, #2d2415 15%, #3d2e1a 30%, #4a3a20 45%, #5a4a2a 50%, #4a3a20 65%, #3d2e1a 80%, #2d2415 100%)"
+    # Animated gradient colors for dark mode
+    gradient_colors = {
+        'color1': '#000000',
+        'color2': '#1a1a1a', 
+        'color3': '#2d2415',
+        'color4': '#3d2e1a',
+        'color5': '#4a3a20',
+        'accent1': '#d4af37',
+        'accent2': '#b8860b'
+    }
 else:
     # Light mode - subtle gold and black
     gradient_bg = "linear-gradient(135deg, #f5f5f0 0%, #e8e0d0 30%, #f5f5f0 60%, #e8e0d0 100%)"
     sidebar_gradient = "linear-gradient(180deg, #faf8f3 0%, #f5f0e8 20%, #ede5d5 40%, #e8dcc5 50%, #ede5d5 60%, #f5f0e8 80%, #faf8f3 100%)"
+    # Animated gradient colors for light mode
+    gradient_colors = {
+        'color1': '#f5f5f0',
+        'color2': '#e8e0d0',
+        'color3': '#ede5d5',
+        'color4': '#e8dcc5',
+        'color5': '#f5f0e8',
+        'accent1': '#d4af37',
+        'accent2': '#b8860b'
+    }
 
 # CSS
 st.markdown(f"""
 <style>
-/* Gold and Black gradient background */
+/* Animated scroll-based gradient background */
 .stApp, [data-testid="stAppViewContainer"] {{
-    background: {gradient_bg} !important;
-    background-attachment: fixed !important;
     position: relative !important;
     min-height: 100vh !important;
+    overflow-x: hidden !important;
 }}
 
-/* Subtle gold overlay for depth */
+/* Animated gradient background layer */
 .stApp::before {{
     content: '';
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
-    height: 100%;
-    background: radial-gradient(circle at 30% 40%, rgba(212, 175, 55, 0.06) 0%, transparent 50%),
-                radial-gradient(circle at 70% 60%, rgba(184, 134, 11, 0.04) 0%, transparent 50%);
+    height: 200%;
+    background: linear-gradient(
+        135deg,
+        {gradient_colors['color1']} 0%,
+        {gradient_colors['color2']} 20%,
+        {gradient_colors['color3']} 40%,
+        {gradient_colors['color4']} 50%,
+        {gradient_colors['color3']} 60%,
+        {gradient_colors['color2']} 80%,
+        {gradient_colors['color1']} 100%
+    );
+    background-size: 100% 200%;
+    background-position: 0% 0%;
     pointer-events: none;
     z-index: 0;
+    transition: background-position 0.1s ease-out;
+    will-change: background-position;
+}}
+
+/* Animated overlay with gold accents */
+.stApp::after {{
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 200%;
+    background: 
+        radial-gradient(circle at 20% 30%, rgba(212, 175, 55, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(184, 134, 11, 0.06) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(212, 175, 55, 0.04) 0%, transparent 50%);
+    background-size: 100% 200%;
+    background-position: 0% 0%;
+    pointer-events: none;
+    z-index: 0;
+    transition: background-position 0.15s ease-out;
+    will-change: background-position;
+}}
+
+/* Ensure content is above gradient */
+[data-testid="stAppViewContainer"] > div {{
+    position: relative;
+    z-index: 1;
 }}
 
 [data-testid="stHeader"] {{
@@ -280,6 +337,81 @@ hr {{
     color: {TEXT} !important;
 }}
 </style>
+
+<script>
+(function() {{
+    // Animated gradient background based on scroll position
+    let ticking = false;
+    
+    function updateGradient() {{
+        const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+        const maxScroll = Math.max(
+            document.documentElement.scrollHeight - window.innerHeight,
+            1
+        );
+        
+        // Calculate scroll percentage (0 to 1)
+        const scrollPercent = Math.min(scrollY / maxScroll, 1);
+        
+        // Calculate background position based on scroll (0% to 100%)
+        const bgPosition = scrollPercent * 100;
+        
+        // Get the gradient elements
+        const app = document.querySelector('.stApp');
+        if (app) {{
+            // Apply transform to gradient layers
+            const style = document.createElement('style');
+            style.id = 'animated-gradient-style';
+            style.textContent = `
+                .stApp::before {{
+                    background-position: 0% ${{bgPosition}}% !important;
+                }}
+                .stApp::after {{
+                    background-position: 0% ${{bgPosition * 0.7}}% !important;
+                }}
+            `;
+            
+            // Remove old style if exists
+            const oldStyle = document.getElementById('animated-gradient-style');
+            if (oldStyle) {{
+                oldStyle.remove();
+            }}
+            
+            document.head.appendChild(style);
+        }}
+        
+        ticking = false;
+    }}
+    
+    function requestTick() {{
+        if (!ticking) {{
+            window.requestAnimationFrame(updateGradient);
+            ticking = true;
+        }}
+    }}
+    
+    // Listen to scroll events with throttling
+    window.addEventListener('scroll', requestTick, {{ passive: true }});
+    window.addEventListener('resize', requestTick, {{ passive: true }});
+    
+    // Initial update
+    setTimeout(updateGradient, 100);
+    
+    // Update on Streamlit content changes
+    const observer = new MutationObserver(function() {{
+        requestTick();
+    }});
+    
+    // Observe the main container for content changes
+    const targetNode = document.querySelector('[data-testid="stAppViewContainer"]');
+    if (targetNode) {{
+        observer.observe(targetNode, {{
+            childList: true,
+            subtree: true
+        }});
+    }}
+}})();
+</script>
 """, unsafe_allow_html=True)
 
 # Cache functions - NOT caching option chain to avoid serialization issues
