@@ -1,63 +1,40 @@
 """
 Configuration constants, theme colors, and CSS for the Trading Simulator.
-Single source of truth for SP500 tickers, color schemes, and styling.
 """
 
 from sp500_tickers import SP500
 
-# Pre-built list for searchable dropdowns
 TICKER_OPTIONS = [""] + [f"{t} - {n}" for t, n in SP500.items()]
-
-# Data persistence file
 DATA_FILE = "trading_data.json"
-
-# Financial Modeling Prep API
 FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
 
 
-def get_theme_colors(dark: bool) -> dict:
-    """Return the full color palette for the given theme mode.
-
-    Args:
-        dark: True for dark mode, False for light mode.
-
-    Returns:
-        Dict with keys: BG, BG2, TEXT, TEXT2, BORDER, GREEN, RED, BLUE, YELLOW.
-    """
+def get_theme_colors(dark: bool, colorblind: bool = False) -> dict:
+    """Return color palette. Colorblind mode swaps green/red for blue/orange."""
     if dark:
-        return {
-            "BG": "#0d1117",
-            "BG2": "#161b22",
-            "TEXT": "#ffffff",
-            "TEXT2": "#8b949e",
+        colors = {
+            "BG": "#0d1117", "BG2": "#161b22",
+            "TEXT": "#ffffff", "TEXT2": "#8b949e",
             "BORDER": "#30363d",
-            "GREEN": "#3fb950",
-            "RED": "#f85149",
-            "BLUE": "#58a6ff",
-            "YELLOW": "#d29922",
+            "GREEN": "#3fb950", "RED": "#f85149",
+            "BLUE": "#58a6ff", "YELLOW": "#d29922",
         }
-    return {
-        "BG": "#ffffff",
-        "BG2": "#f6f8fa",
-        "TEXT": "#24292f",
-        "TEXT2": "#57606a",
-        "BORDER": "#d0d7de",
-        "GREEN": "#1a7f37",
-        "RED": "#cf222e",
-        "BLUE": "#0969da",
-        "YELLOW": "#9a6700",
-    }
+    else:
+        colors = {
+            "BG": "#ffffff", "BG2": "#f6f8fa",
+            "TEXT": "#24292f", "TEXT2": "#57606a",
+            "BORDER": "#d0d7de",
+            "GREEN": "#1a7f37", "RED": "#cf222e",
+            "BLUE": "#0969da", "YELLOW": "#9a6700",
+        }
+    if colorblind:
+        colors["GREEN"] = "#2563eb"  # Blue for positive
+        colors["RED"] = "#d97706"    # Orange for negative
+    return colors
 
 
 def render_css(colors: dict) -> str:
-    """Return the full CSS block for Streamlit theming.
-
-    Args:
-        colors: Color palette dict from get_theme_colors().
-
-    Returns:
-        HTML <style> string ready for st.markdown(unsafe_allow_html=True).
-    """
+    """Return the full CSS block for Streamlit theming."""
     c = colors
     return f"""
 <style>

@@ -1,5 +1,5 @@
 """
-Risk metrics: VaR, Sharpe ratio, max drawdown, and portfolio daily returns.
+Risk metrics: VaR, Sharpe, max drawdown, Monte Carlo, correlation.
 Pure numpy/pandas — no Streamlit dependency.
 """
 
@@ -7,113 +7,99 @@ import numpy as np
 import pandas as pd
 
 
-def compute_sharpe_ratio(
-    daily_returns: pd.Series, risk_free_rate: float = 0.05
-) -> float:
-    """Compute annualized Sharpe ratio.
-
-    Args:
-        daily_returns: Series of daily portfolio returns (as decimals).
-        risk_free_rate: Annualized risk-free rate (default 5%).
-
-    Returns:
-        Annualized Sharpe ratio, or 0.0 if returns are empty or
-        standard deviation is zero.
-    """
+def compute_sharpe_ratio(daily_returns, risk_free_rate=0.05):
+    """Annualized Sharpe ratio."""
     if daily_returns.empty or daily_returns.std() == 0:
         return 0.0
-    daily_rf = risk_free_rate / 252
-    excess = daily_returns - daily_rf
+    excess = daily_returns - risk_free_rate / 252
     return float(excess.mean() / excess.std() * np.sqrt(252))
 
 
-def compute_max_drawdown(cumulative_returns: pd.Series) -> float:
-    """Compute maximum drawdown (peak-to-trough percentage).
-
-    Args:
-        cumulative_returns: Series of cumulative return values
-            (e.g. portfolio value over time, or 1+cumulative %).
-
-    Returns:
-        Max drawdown as a negative percentage (e.g. -0.15 for -15%).
-        Returns 0.0 if series is empty or has no drawdown.
-    """
+def compute_max_drawdown(cumulative_returns):
+    """Maximum drawdown (peak-to-trough %)."""
     if cumulative_returns.empty:
         return 0.0
     peak = cumulative_returns.expanding().max()
-    drawdown = (cumulative_returns - peak) / peak
-    return float(drawdown.min())
+    return float(((cumulative_returns - peak) / peak).min())
 
 
-def compute_var_historical(
-    daily_returns: pd.Series,
-    confidence: float = 0.95,
-    portfolio_val: float = 100000.0,
-) -> float:
-    """Compute historical Value at Risk (dollar amount).
-
-    Args:
-        daily_returns: Series of daily portfolio returns (as decimals).
-        confidence: Confidence level (default 95%).
-        portfolio_val: Current portfolio dollar value.
-
-    Returns:
-        Dollar VaR (positive number representing potential loss).
-        Returns 0.0 if returns are empty.
-    """
+def compute_var_historical(daily_returns, confidence=0.95, portfolio_val=100000.0):
+    """Historical Value at Risk (dollar amount)."""
     if daily_returns.empty:
         return 0.0
-    percentile = np.percentile(daily_returns, (1 - confidence) * 100)
-    return float(abs(percentile) * portfolio_val)
+    return float(abs(np.percentile(daily_returns, (1 - confidence) * 100)) * portfolio_val)
 
 
-def build_portfolio_daily_returns(
-    holdings: dict,
-    get_history_fn,
-    starting_balance: float,
-) -> pd.Series:
-    """Build weighted daily returns for the portfolio.
-
-    Args:
-        holdings: Dict mapping ticker -> {"shares": float, "cost": float}.
-        get_history_fn: Callable(ticker, period) -> DataFrame with "Close" column.
-        starting_balance: Account starting balance for weight calculation.
-
-    Returns:
-        Series of daily portfolio returns (as decimals). Empty Series
-        if no price data is available.
-    """
+def build_portfolio_daily_returns(holdings, get_history_fn, starting_balance):
+    """Build weighted daily returns for the portfolio."""
     if not holdings:
         return pd.Series(dtype=float)
-
-    all_returns = {}
-    weights = {}
     total_invested = sum(v["cost"] for v in holdings.values())
-
     if total_invested == 0:
         return pd.Series(dtype=float)
 
+    all_returns, weights = {}, {}
     for ticker, h in holdings.items():
         hist = get_history_fn(ticker, "6mo")
         if hist.empty or "Close" not in hist.columns:
             continue
-        returns = hist["Close"].pct_change().dropna()
-        all_returns[ticker] = returns
+        close = hist["Close"]
+        if close.index.tz is not None:
+            close = close.tz_localize(None)
+        all_returns[ticker] = close.pct_change().dropna()
         weights[ticker] = h["cost"] / total_invested
 
     if not all_returns:
         return pd.Series(dtype=float)
-
-    # Align all return series to common dates
-    df = pd.DataFrame(all_returns)
-    df = df.dropna()
-
+    df = pd.DataFrame(all_returns).dropna()
     if df.empty:
         return pd.Series(dtype=float)
 
-    # Weighted portfolio returns
     portfolio_returns = pd.Series(0.0, index=df.index)
     for ticker in df.columns:
         portfolio_returns += df[ticker] * weights.get(ticker, 0)
-
     return portfolio_returns
+
+
+def compute_monte_carlo(daily_returns, portfolio_val, days=252, sims=500):
+    """Run Monte Carlo simulation. Returns dict with percentile bands.
+
+    Returns:
+        Dict with keys: p5, p25, p50, p75, p95 — each a list of values over `days`.
+    """
+    if daily_returns.empty:
+        return {}
+    mean_ret = daily_returns.mean()
+    std_ret = daily_returns.std()
+    results = np.zeros((sims, days))
+    for i in range(sims):
+        daily = np.random.normal(mean_ret, std_ret, days)
+        results[i] = portfolio_val * np.cumprod(1 + daily)
+    return {
+        "p5": np.percentile(results, 5, axis=0).tolist(),
+        "p25": np.percentile(results, 25, axis=0).tolist(),
+        "p50": np.percentile(results, 50, axis=0).tolist(),
+        "p75": np.percentile(results, 75, axis=0).tolist(),
+        "p95": np.percentile(results, 95, axis=0).tolist(),
+    }
+
+
+def compute_correlation_matrix(holdings, get_history_fn):
+    """Compute pairwise correlation matrix for portfolio holdings.
+
+    Returns:
+        DataFrame of correlations, or empty DataFrame.
+    """
+    if len(holdings) < 2:
+        return pd.DataFrame()
+    closes = {}
+    for ticker in holdings:
+        hist = get_history_fn(ticker, "6mo")
+        if not hist.empty and "Close" in hist.columns:
+            close = hist["Close"]
+            if close.index.tz is not None:
+                close = close.tz_localize(None)
+            closes[ticker] = close
+    if len(closes) < 2:
+        return pd.DataFrame()
+    return pd.DataFrame(closes).pct_change().dropna().corr()

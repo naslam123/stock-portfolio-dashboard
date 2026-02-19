@@ -1,6 +1,5 @@
 """
-Portfolio calculation functions for holdings, P/L, and portfolio value.
-Accesses st.session_state.data directly (pragmatic for Streamlit project).
+Portfolio calculations: holdings, P/L, portfolio value, trade stats.
 """
 
 import streamlit as st
@@ -8,12 +7,7 @@ from market_data import get_price, get_option_chain_data
 
 
 def get_holdings() -> dict:
-    """Calculate net stock positions from all portfolio trades.
-
-    Returns:
-        Dict mapping ticker -> {"shares": float, "cost": float}
-        for positions with shares > 0.001.
-    """
+    """Calculate net stock positions from all portfolio trades."""
     holdings = {}
     for t in st.session_state.data["portfolio"]:
         tk = t["ticker"]
@@ -28,82 +22,94 @@ def get_holdings() -> dict:
 
 
 def get_options_holdings() -> dict:
-    """Calculate net options positions from all options trades.
-
-    Returns:
-        Dict mapping contract key -> {"ticker", "type", "strike",
-        "expiration", "contracts", "total_cost"} for positions
-        with contracts > 0.
-    """
+    """Calculate net options positions from all options trades."""
     holdings = {}
     for opt in st.session_state.data["options"]:
         key = f"{opt['ticker']}_{opt['type']}_{opt['strike']}_{opt['expiration']}"
         if key not in holdings:
             holdings[key] = {
-                "ticker": opt["ticker"],
-                "type": opt["type"],
-                "strike": opt["strike"],
-                "expiration": opt["expiration"],
-                "contracts": 0,
-                "total_cost": 0,
+                "ticker": opt["ticker"], "type": opt["type"],
+                "strike": opt["strike"], "expiration": opt["expiration"],
+                "contracts": 0, "total_cost": 0,
             }
         if "Buy" in opt["action"]:
             holdings[key]["contracts"] += opt["contracts"]
             holdings[key]["total_cost"] += opt["total"]
-        else:  # Sell to Close
+        else:
             holdings[key]["contracts"] -= opt["contracts"]
     return {k: v for k, v in holdings.items() if v["contracts"] > 0}
 
 
-def get_option_current_price(
-    ticker: str, expiration: str, strike: float, opt_type: str
-) -> float:
-    """Get current mid-price for a specific option contract.
-
-    Args:
-        ticker: Underlying stock symbol.
-        expiration: Expiration date string.
-        strike: Strike price.
-        opt_type: "call" or "put".
-
-    Returns:
-        Mid-price between bid/ask, or lastPrice, or 0 on failure.
-    """
+def get_option_current_price(ticker, expiration, strike, opt_type):
+    """Get current mid-price for a specific option contract."""
     try:
         df = get_option_chain_data(ticker, expiration, opt_type.capitalize())
         if not df.empty:
             row = df[df["strike"] == strike]
             if not row.empty:
-                bid = row.iloc[0]["bid"]
-                ask = row.iloc[0]["ask"]
+                bid, ask = row.iloc[0]["bid"], row.iloc[0]["ask"]
                 return (bid + ask) / 2 if bid > 0 and ask > 0 else row.iloc[0]["lastPrice"]
     except Exception:
         pass
     return 0
 
 
-def options_portfolio_value() -> float:
-    """Calculate total current value of all options positions.
-
-    Returns:
-        Dollar value of all open options contracts.
-    """
+def options_portfolio_value():
+    """Calculate total current value of all options positions."""
     total = 0
     for key, opt in get_options_holdings().items():
-        price = get_option_current_price(
-            opt["ticker"], opt["expiration"], opt["strike"], opt["type"]
-        )
+        price = get_option_current_price(opt["ticker"], opt["expiration"], opt["strike"], opt["type"])
         total += price * 100 * opt["contracts"]
     return total
 
 
-def portfolio_value() -> float:
-    """Calculate total account value: cash + stocks + options.
-
-    Returns:
-        Total portfolio dollar value.
-    """
+def portfolio_value():
+    """Calculate total account value: cash + stocks + options."""
     h = get_holdings()
     stock_value = sum(get_price(t)[0] * v["shares"] for t, v in h.items())
-    opts_value = options_portfolio_value()
-    return st.session_state.data["cash"] + stock_value + opts_value
+    return st.session_state.data["cash"] + stock_value + options_portfolio_value()
+
+
+def get_trade_stats(journal: list) -> dict:
+    """Compute trade journal analytics: win rate, avg win/loss, profit factor.
+
+    Pairs buy/sell trades by ticker to determine wins/losses.
+    """
+    if not journal:
+        return {"total": 0, "wins": 0, "losses": 0, "win_rate": 0,
+                "avg_win": 0, "avg_loss": 0, "best": 0, "worst": 0, "profit_factor": 0}
+
+    # Track buy prices per ticker
+    buys = {}
+    results = []
+    for t in journal:
+        tk = t["ticker"]
+        if t["action"] == "buy":
+            buys.setdefault(tk, []).append(t["price"])
+        elif t["action"] == "sell" and tk in buys and buys[tk]:
+            buy_price = buys[tk].pop(0)
+            pnl_pct = (t["price"] - buy_price) / buy_price * 100
+            results.append(pnl_pct)
+
+    if not results:
+        return {"total": len(journal), "wins": 0, "losses": 0, "win_rate": 0,
+                "avg_win": 0, "avg_loss": 0, "best": 0, "worst": 0, "profit_factor": 0}
+
+    wins = [r for r in results if r > 0]
+    losses = [r for r in results if r <= 0]
+    avg_win = sum(wins) / len(wins) if wins else 0
+    avg_loss = sum(losses) / len(losses) if losses else 0
+    gross_profit = sum(wins)
+    gross_loss = abs(sum(losses))
+
+    return {
+        "total": len(journal),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": len(wins) / len(results) * 100 if results else 0,
+        "avg_win": avg_win,
+        "avg_loss": avg_loss,
+        "best": max(results) if results else 0,
+        "worst": min(results) if results else 0,
+        "profit_factor": gross_profit / gross_loss if gross_loss > 0 else float('inf') if gross_profit > 0 else 0,
+    }
