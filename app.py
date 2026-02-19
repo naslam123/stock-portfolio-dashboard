@@ -1,281 +1,43 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
 from datetime import datetime
-import json
-import os
+
+from sp500_tickers import SP500
+from config import TICKER_OPTIONS, get_theme_colors, render_css
+from data_manager import default_data, load_data, save_data
+from market_data import (
+    get_price, get_info, get_history,
+    get_option_dates, get_option_chain_data, get_analyst_data,
+)
+from portfolio import (
+    get_holdings, get_options_holdings, get_option_current_price,
+    options_portfolio_value, portfolio_value,
+)
+from risk_metrics import (
+    compute_sharpe_ratio, compute_max_drawdown,
+    compute_var_historical, build_portfolio_daily_returns,
+)
+from ai_signals import detect_market_regime, analyze_valuation
 
 st.set_page_config(page_title="Trading Simulator", page_icon="📈", layout="wide")
-
-# S&P 500 tickers
-SP500 = {
-    "AAPL": "Apple Inc.", "MSFT": "Microsoft Corporation", "AMZN": "Amazon.com Inc.",
-    "NVDA": "NVIDIA Corporation", "GOOGL": "Alphabet Inc.", "META": "Meta Platforms Inc.",
-    "TSLA": "Tesla Inc.", "BRK.B": "Berkshire Hathaway", "UNH": "UnitedHealth Group",
-    "JNJ": "Johnson & Johnson", "JPM": "JPMorgan Chase", "V": "Visa Inc.",
-    "PG": "Procter & Gamble", "XOM": "Exxon Mobil", "MA": "Mastercard Inc.",
-    "HD": "Home Depot", "CVX": "Chevron Corp", "MRK": "Merck & Co.",
-    "ABBV": "AbbVie Inc.", "LLY": "Eli Lilly", "PEP": "PepsiCo Inc.",
-    "KO": "Coca-Cola", "COST": "Costco", "AVGO": "Broadcom Inc.",
-    "WMT": "Walmart Inc.", "MCD": "McDonald's", "CSCO": "Cisco Systems",
-    "TMO": "Thermo Fisher", "ACN": "Accenture", "ABT": "Abbott Labs",
-    "ADBE": "Adobe Inc.", "NKE": "Nike Inc.", "ORCL": "Oracle Corp",
-    "CRM": "Salesforce", "AMD": "AMD", "INTC": "Intel Corp",
-    "DIS": "Walt Disney", "VZ": "Verizon", "CMCSA": "Comcast",
-    "TXN": "Texas Instruments", "PM": "Philip Morris", "WFC": "Wells Fargo",
-    "RTX": "RTX Corp", "QCOM": "Qualcomm", "HON": "Honeywell",
-    "UNP": "Union Pacific", "IBM": "IBM", "CAT": "Caterpillar",
-    "BA": "Boeing", "GE": "General Electric", "AMGN": "Amgen",
-    "LOW": "Lowe's", "DE": "Deere & Co", "INTU": "Intuit",
-    "GS": "Goldman Sachs", "AXP": "American Express", "BKNG": "Booking Holdings",
-    "BLK": "BlackRock", "SBUX": "Starbucks", "GILD": "Gilead Sciences",
-    "PYPL": "PayPal", "MU": "Micron", "SQ": "Block Inc.",
-}
-
-# Pre-built list for searchable dropdowns
-TICKER_OPTIONS = [""] + [f"{t} - {n}" for t, n in SP500.items()]
-
-# Data file
-DATA_FILE = "trading_data.json"
-
-def default_data():
-    return {
-        "cash": 100000.0,
-        "starting_balance": 100000.0,
-        "portfolio": [],
-        "watchlist": [],
-        "options": [],
-        "pending_orders": [],
-        "journal": [],
-        "theme": "dark",
-        "commission_enabled": True,
-        "commission_stock": 0.0,
-        "commission_option": 0.65,
-    }
-
-def load_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                data = json.load(f)
-                for key, val in default_data().items():
-                    if key not in data:
-                        data[key] = val
-                return data
-        except:
-            return default_data()
-    return default_data()
-
-def save_data():
-    with open(DATA_FILE, "w") as f:
-        json.dump(st.session_state.data, f, indent=2, default=str)
 
 # Load data ONCE
 if "data" not in st.session_state:
     st.session_state.data = load_data()
 
-# Theme from saved data
+# Theme
 theme = st.session_state.data.get("theme", "dark")
 dark = theme == "dark"
+colors = get_theme_colors(dark)
+BG, BG2 = colors["BG"], colors["BG2"]
+TEXT, TEXT2 = colors["TEXT"], colors["TEXT2"]
+BORDER = colors["BORDER"]
+GREEN, RED, BLUE, YELLOW = colors["GREEN"], colors["RED"], colors["BLUE"], colors["YELLOW"]
 
-# Simple color scheme
-if dark:
-    BG = "#0d1117"
-    BG2 = "#161b22"
-    TEXT = "#ffffff"
-    TEXT2 = "#8b949e"
-    BORDER = "#30363d"
-    GREEN = "#3fb950"
-    RED = "#f85149"
-    BLUE = "#58a6ff"
-    YELLOW = "#d29922"
-else:
-    BG = "#ffffff"
-    BG2 = "#f6f8fa"
-    TEXT = "#24292f"
-    TEXT2 = "#57606a"
-    BORDER = "#d0d7de"
-    GREEN = "#1a7f37"
-    RED = "#cf222e"
-    BLUE = "#0969da"
-    YELLOW = "#9a6700"
+st.markdown(render_css(colors), unsafe_allow_html=True)
 
-# CSS
-st.markdown(f"""
-<style>
-.stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {{
-    background: {BG} !important;
-}}
-section[data-testid="stSidebar"] > div {{
-    background: {BG2} !important;
-}}
-h1, h2, h3 {{
-    color: {TEXT} !important;
-}}
-p, span, label {{
-    color: {TEXT} !important;
-}}
-[data-testid="stMetricValue"] {{
-    color: {TEXT} !important;
-}}
-[data-testid="stMetricLabel"] {{
-    color: {TEXT2} !important;
-}}
-.stTextInput input, .stNumberInput input {{
-    background: {BG2} !important;
-    border: 1px solid {BORDER} !important;
-    color: {TEXT} !important;
-}}
-.stSelectbox > div > div {{
-    background: {BG2} !important;
-    border: 1px solid {BORDER} !important;
-    color: {TEXT} !important;
-}}
-.stSelectbox input {{
-    color: {TEXT} !important;
-}}
-[data-testid="stTextInput"] input:disabled {{
-    color: {TEXT} !important;
-    -webkit-text-fill-color: {TEXT} !important;
-}}
-.stButton > button {{
-    background: {BG2} !important;
-    color: {TEXT} !important;
-    border: 1px solid {BORDER} !important;
-    border-radius: 6px !important;
-    padding: 8px 16px !important;
-}}
-.stButton > button[kind="primary"] {{
-    background: {BLUE} !important;
-    color: white !important;
-    border: none !important;
-}}
-hr {{
-    border-color: {BORDER} !important;
-}}
-.stDataFrame {{
-    border: 1px solid {BORDER} !important;
-}}
-.stCheckbox > label {{
-    color: {TEXT} !important;
-}}
-.stRadio > div > label {{
-    color: {TEXT} !important;
-}}
-</style>
-""", unsafe_allow_html=True)
-
-# Cache functions - NOT caching option chain to avoid serialization issues
-@st.cache_data(ttl=60)
-def get_price(ticker):
-    try:
-        info = yf.Ticker(ticker).info
-        price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-        prev = info.get("previousClose", price)
-        return price, price - prev, ((price - prev) / prev * 100) if prev else 0
-    except:
-        return 0, 0, 0
-
-@st.cache_data(ttl=60)
-def get_info(ticker):
-    try:
-        return yf.Ticker(ticker).info
-    except:
-        return {}
-
-@st.cache_data(ttl=300)
-def get_history(ticker, period="6mo"):
-    try:
-        return yf.Ticker(ticker).history(period=period)
-    except:
-        return pd.DataFrame()
-
-def get_option_dates(ticker):
-    """Get option expiration dates - not cached"""
-    try:
-        t = yf.Ticker(ticker)
-        return list(t.options) if t.options else []
-    except:
-        return []
-
-def get_option_chain_data(ticker, exp_date, opt_type):
-    """Get option chain as DataFrame - not cached to avoid serialization issues"""
-    try:
-        t = yf.Ticker(ticker)
-        chain = t.option_chain(exp_date)
-        df = chain.calls if opt_type == "Call" else chain.puts
-        return df
-    except:
-        return pd.DataFrame()
-
-def get_holdings():
-    holdings = {}
-    for t in st.session_state.data["portfolio"]:
-        tk = t["ticker"]
-        if tk not in holdings:
-            holdings[tk] = {"shares": 0, "cost": 0}
-        if t["type"] == "buy":
-            holdings[tk]["shares"] += t["shares"]
-            holdings[tk]["cost"] += t["shares"] * t["price"]
-        else:
-            holdings[tk]["shares"] -= t["shares"]
-    return {k: v for k, v in holdings.items() if v["shares"] > 0.001}
-
-def get_options_holdings():
-    """Calculate net options positions from all options trades."""
-    holdings = {}
-    for opt in st.session_state.data["options"]:
-        # Create unique key for each option contract
-        key = f"{opt['ticker']}_{opt['type']}_{opt['strike']}_{opt['expiration']}"
-        if key not in holdings:
-            holdings[key] = {
-                "ticker": opt["ticker"],
-                "type": opt["type"],
-                "strike": opt["strike"],
-                "expiration": opt["expiration"],
-                "contracts": 0,
-                "total_cost": 0
-            }
-        if "Buy" in opt["action"]:
-            holdings[key]["contracts"] += opt["contracts"]
-            holdings[key]["total_cost"] += opt["total"]
-        else:  # Sell to Close
-            holdings[key]["contracts"] -= opt["contracts"]
-    # Only return positions with contracts > 0
-    return {k: v for k, v in holdings.items() if v["contracts"] > 0}
-
-def get_option_current_price(ticker, expiration, strike, opt_type):
-    """Get current price for a specific option contract."""
-    try:
-        df = get_option_chain_data(ticker, expiration, opt_type.capitalize())
-        if not df.empty:
-            row = df[df["strike"] == strike]
-            if not row.empty:
-                # Use mid price between bid and ask
-                bid = row.iloc[0]["bid"]
-                ask = row.iloc[0]["ask"]
-                return (bid + ask) / 2 if bid > 0 and ask > 0 else row.iloc[0]["lastPrice"]
-    except:
-        pass
-    return 0
-
-def options_portfolio_value():
-    """Calculate total current value of all options positions."""
-    total = 0
-    for key, opt in get_options_holdings().items():
-        price = get_option_current_price(opt["ticker"], opt["expiration"], opt["strike"], opt["type"])
-        total += price * 100 * opt["contracts"]  # Each contract = 100 shares
-    return total
-
-def portfolio_value():
-    h = get_holdings()
-    stock_value = sum(get_price(t)[0] * v["shares"] for t, v in h.items())
-    options_value = options_portfolio_value()
-    return st.session_state.data["cash"] + stock_value + options_value
-
-# Sidebar
+# ==================== SIDEBAR ====================
 with st.sidebar:
     st.markdown(f"<h2 style='text-align:center; color:{TEXT};'>Trading Simulator</h2>", unsafe_allow_html=True)
     st.caption("MGMT 590 | Purdue University")
@@ -284,26 +46,23 @@ with st.sidebar:
 
     new_dark = st.toggle("Dark Mode", value=dark, key="dark_toggle")
 
-    # Only update if changed AND different from current
     if new_dark and st.session_state.data["theme"] != "dark":
         st.session_state.data["theme"] = "dark"
-        save_data()
+        save_data(st.session_state.data)
         st.rerun()
     elif not new_dark and st.session_state.data["theme"] != "light":
         st.session_state.data["theme"] = "light"
-        save_data()
+        save_data(st.session_state.data)
         st.rerun()
 
     st.divider()
 
-    # Refresh button (styled to match background)
     if st.button("🔄 Refresh Prices", use_container_width=True, key="refresh_btn"):
         st.cache_data.clear()
         st.rerun()
 
     st.divider()
 
-    # Account summary
     total = portfolio_value()
     cash = st.session_state.data["cash"]
     start = st.session_state.data["starting_balance"]
@@ -393,7 +152,7 @@ def execute_trade(t):
         "notes": t.get("notes", "")
     })
 
-    save_data()
+    save_data(st.session_state.data)
 
 # ==================== PORTFOLIO ====================
 if page == "Portfolio":
@@ -445,7 +204,6 @@ if page == "Portfolio":
 
         st.divider()
 
-        # Stock Holdings Section
         if holdings:
             df = pd.DataFrame(data)
             df_show = df.copy()
@@ -467,7 +225,6 @@ if page == "Portfolio":
                 labels = list(df["Ticker"]) + ["Cash"]
                 values = list(df["Value"]) + [st.session_state.data["cash"]]
 
-                # Add options value to allocation if any
                 if opts_val > 0:
                     labels.append("Options")
                     values.append(opts_val)
@@ -494,7 +251,6 @@ if page == "Portfolio":
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
-        # Options Positions Section
         if options_holdings:
             st.subheader("Options Positions")
             opts_data = []
@@ -520,13 +276,11 @@ if page == "Portfolio":
 
             st.dataframe(pd.DataFrame(opts_data), use_container_width=True, hide_index=True)
 
-        # Performance charts (only if stock holdings exist)
         if holdings:
             st.subheader("Performance")
             perf_col1, perf_col2 = st.columns(2)
 
             with perf_col1:
-                # Bar chart - P/L %
                 blues = ["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"]
                 fig1 = go.Figure(data=[go.Bar(
                     x=df["Ticker"], y=df["P/L %"],
@@ -552,7 +306,6 @@ if page == "Portfolio":
                 st.plotly_chart(fig1, use_container_width=True)
 
             with perf_col2:
-                # Portfolio Summary
                 st.markdown(f"""
                 <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:20px; height:260px;">
                     <div style="color:{TEXT}; font-size:14px; font-weight:bold; margin-bottom:16px;">Portfolio Summary</div>
@@ -605,7 +358,6 @@ elif page == "Trade":
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        # Single searchable selectbox - type to filter
         sel = st.selectbox(
             "Search Stock",
             TICKER_OPTIONS,
@@ -705,7 +457,6 @@ elif page == "Trade":
 elif page == "Options":
     st.header("Options Trading")
 
-    # Single searchable selectbox
     sel = st.selectbox(
         "Search Underlying",
         TICKER_OPTIONS,
@@ -729,7 +480,6 @@ elif page == "Options":
         </div>
         """, unsafe_allow_html=True)
 
-        # Get option dates without caching
         dates = get_option_dates(ticker)
 
         if dates:
@@ -739,7 +489,6 @@ elif page == "Options":
             with col2:
                 opt_type = st.radio("Type", ["Call", "Put"], horizontal=True)
 
-            # Get option chain without caching
             with st.spinner("Loading options..."):
                 df = get_option_chain_data(ticker, exp, opt_type)
 
@@ -787,7 +536,7 @@ elif page == "Options":
                             "total": total,
                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         })
-                        save_data()
+                        save_data(st.session_state.data)
                         st.success(f"Executed: {opt_action} {contracts}x {ticker} ${strike} {opt_type}")
                     else:
                         st.error("Insufficient funds")
@@ -810,12 +559,12 @@ elif page == "Watchlist":
             label_visibility="collapsed"
         )
     with col2:
-        st.write("")  # Spacing
+        st.write("")
         if sel and st.button("Add", type="primary", use_container_width=True):
             tk = sel.split(" - ")[0]
             if tk not in st.session_state.data["watchlist"]:
                 st.session_state.data["watchlist"].append(tk)
-                save_data()
+                save_data(st.session_state.data)
                 st.rerun()
 
     st.divider()
@@ -841,10 +590,10 @@ elif page == "Watchlist":
         with col1:
             rem = st.selectbox("Remove", ["--"] + wl)
         with col2:
-            st.write("")  # Spacing
+            st.write("")
             if rem != "--" and st.button("Remove", use_container_width=True):
                 st.session_state.data["watchlist"].remove(rem)
-                save_data()
+                save_data(st.session_state.data)
                 st.rerun()
 
 # ==================== RESEARCH ====================
@@ -911,7 +660,6 @@ elif page == "Research":
             st.divider()
             st.subheader("Latest News")
 
-            # Direct links to financial news
             company_name = info.get('shortName', ticker).replace(' ', '+')
             st.markdown(f"""
             <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
@@ -934,6 +682,40 @@ elif page == "Research":
             </div>
             """, unsafe_allow_html=True)
 
+            # AI Signals Section
+            st.divider()
+            st.subheader("AI Signals")
+
+            sig_col1, sig_col2 = st.columns(2)
+
+            with sig_col1:
+                st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>Market Regime</div>", unsafe_allow_html=True)
+                regime = detect_market_regime(df)
+                regime_color = GREEN if regime["regime"] == "Bullish" else RED if regime["regime"] == "Bearish" else YELLOW
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
+                    <div style="font-size:1.4rem; font-weight:bold; color:{regime_color};">{regime['regime']}</div>
+                    <div style="color:{TEXT2}; margin-top:4px;">Confidence: {regime['confidence']} | Strength: {regime['signal_strength']:.0%}</div>
+                    <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{regime['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with sig_col2:
+                st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>DCF Valuation</div>", unsafe_allow_html=True)
+                analyst_data = get_analyst_data(ticker)
+                if analyst_data:
+                    valuation = analyze_valuation(analyst_data)
+                    val_color = GREEN if valuation["signal"] == "Undervalued" else RED if valuation["signal"] == "Overvalued" else YELLOW
+                    st.markdown(f"""
+                    <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:{val_color};">{valuation['signal']}</div>
+                        <div style="color:{TEXT2}; margin-top:4px;">DCF: ${valuation['dcf']:,.2f} | Margin: {valuation['margin_of_safety']:+.1f}%</div>
+                        <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{valuation['description']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("Add FMP_API_KEY in .streamlit/secrets.toml to enable DCF valuation.")
+
 # ==================== ANALYTICS ====================
 elif page == "Analytics":
     st.header("Portfolio Analytics")
@@ -955,6 +737,28 @@ elif page == "Analytics":
         c2.metric("vs S&P 500", f"{ret - spy_ret:+.2f}%", "Beat" if ret > spy_ret else "Trail")
         c3.metric("Positions", len(holdings))
         c4.metric("Cash %", f"{st.session_state.data['cash']/total*100:.1f}%")
+
+        st.divider()
+
+        # Risk Metrics Section
+        st.subheader("Risk Metrics")
+
+        portfolio_returns = build_portfolio_daily_returns(
+            holdings, get_history, st.session_state.data["starting_balance"]
+        )
+
+        if not portfolio_returns.empty:
+            sharpe = compute_sharpe_ratio(portfolio_returns)
+            cumulative = (1 + portfolio_returns).cumprod()
+            max_dd = compute_max_drawdown(cumulative)
+            var_95 = compute_var_historical(portfolio_returns, 0.95, total)
+
+            rc1, rc2, rc3 = st.columns(3)
+            rc1.metric("Sharpe Ratio", f"{sharpe:.2f}")
+            rc2.metric("Max Drawdown", f"{max_dd:.1%}")
+            rc3.metric("VaR (95%)", f"${var_95:,.0f}")
+        else:
+            st.info("Need at least 50 days of history for risk metrics.")
 
         st.divider()
 
@@ -999,7 +803,7 @@ elif page == "Settings":
     comm_enabled = st.checkbox("Enable Commissions", value=st.session_state.data["commission_enabled"])
     if comm_enabled != st.session_state.data["commission_enabled"]:
         st.session_state.data["commission_enabled"] = comm_enabled
-        save_data()
+        save_data(st.session_state.data)
 
     if comm_enabled:
         c1, c2 = st.columns(2)
@@ -1007,12 +811,12 @@ elif page == "Settings":
             stock_comm = st.number_input("Stock Commission ($)", value=st.session_state.data["commission_stock"], step=0.01)
             if stock_comm != st.session_state.data["commission_stock"]:
                 st.session_state.data["commission_stock"] = stock_comm
-                save_data()
+                save_data(st.session_state.data)
         with c2:
             opt_comm = st.number_input("Option Commission ($/contract)", value=st.session_state.data["commission_option"], step=0.01)
             if opt_comm != st.session_state.data["commission_option"]:
                 st.session_state.data["commission_option"] = opt_comm
-                save_data()
+                save_data(st.session_state.data)
 
     st.divider()
 
@@ -1023,10 +827,10 @@ elif page == "Settings":
         st.session_state.data = default_data()
         st.session_state.data["starting_balance"] = new_bal
         st.session_state.data["cash"] = new_bal
-        save_data()
+        save_data(st.session_state.data)
         st.success(f"Account reset with ${new_bal:,.0f}")
         st.rerun()
 
 # Footer
 st.divider()
-st.caption("Yahoo Finance (15-min delay) | MGMT 590 | Purdue")
+st.caption("Financial Modeling Prep + Yahoo Finance (fallback) | MGMT 590 | Purdue")

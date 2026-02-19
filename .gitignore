@@ -1,6 +1,8 @@
 __pycache__/
 *.pyc
 portfolio_data.json
+trading_data.json
 .env
 venv/
 .venv/
+.streamlit/secrets.toml
