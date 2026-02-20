@@ -200,29 +200,30 @@ def get_analyst_data(ticker: str) -> dict:
 
     Returns:
         Dict with keys: estimates (list), dcf (float), stock_price (float).
-        Empty dict if FMP key is missing or on failure.
+        Returns {"error": "reason"} if key missing or API fails.
     """
     key = _get_fmp_key()
     if not key:
-        return {}
+        return {"error": "no_key"}
     result = {}
     try:
-        # Analyst estimates
         url = f"{FMP_STABLE_URL}/analyst-estimates?symbol={ticker}&period=annual&apikey={key}"
         resp = requests.get(url, timeout=10)
         data = resp.json()
         if isinstance(data, list) and data:
-            result["estimates"] = data[:3]  # Next 3 fiscal years
-    except Exception:
-        pass
+            result["estimates"] = data[:3]
+        elif isinstance(data, dict) and "error" in str(data).lower():
+            result["error"] = f"FMP: {data}"
+    except Exception as e:
+        result["error"] = f"estimates: {e}"
     try:
-        # DCF valuation
         url = f"{FMP_STABLE_URL}/discounted-cash-flow?symbol={ticker}&apikey={key}"
         resp = requests.get(url, timeout=10)
         data = resp.json()
         if isinstance(data, list) and data:
             result["dcf"] = data[0].get("dcf", 0)
             result["stock_price"] = data[0].get("Stock Price", 0)
-    except Exception:
-        pass
+    except Exception as e:
+        if "error" not in result:
+            result["error"] = f"dcf: {e}"
     return result

@@ -1212,7 +1212,7 @@ elif page == "Research":
             with sig_col2:
                 st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>DCF Valuation</div>", unsafe_allow_html=True)
                 analyst_data = get_analyst_data(ticker)
-                if analyst_data:
+                if analyst_data.get("dcf") is not None:
                     valuation = analyze_valuation(analyst_data)
                     val_color = GREEN if valuation["signal"] == "Undervalued" else RED if valuation["signal"] == "Overvalued" else YELLOW
                     st.markdown(f"""
@@ -1222,8 +1222,10 @@ elif page == "Research":
                         <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{valuation['description']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                else:
+                elif analyst_data.get("error") == "no_key":
                     st.info("Add FMP_API_KEY in .streamlit/secrets.toml to enable DCF valuation.")
+                else:
+                    st.warning(f"DCF data unavailable. {analyst_data.get('error', 'FMP API may be rate-limited.')}")
 
 # ==================== ANALYTICS ====================
 elif page == "Analytics":
