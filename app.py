@@ -27,6 +27,9 @@ from ai_signals import (
     compute_option_payoff, BADGE_META, BADGE_DEFS,
 )
 from chatbot import build_portfolio_context, get_ai_response
+from news_feed import get_stock_news, get_general_news, analyze_sentiment_batch, get_sentiment_color, format_time_ago
+from rebalancer import compute_current_weights, generate_equal_weight_targets, generate_custom_targets, compute_rebalance_trades, estimate_rebalance_cost
+from dashboard import get_market_overview, get_top_movers, get_triggered_alerts
 
 st.set_page_config(page_title="Trading Simulator", page_icon="📈", layout="wide")
 
@@ -125,7 +128,14 @@ with st.sidebar:
 
     st.divider()
 
-    page = st.radio("Navigation", ["Portfolio", "Trade", "Options", "Watchlist", "Research", "Analytics", "AI Assistant", "Settings"], label_visibility="collapsed")
+    nav_options = ["Dashboard", "Portfolio", "Trade", "Options", "Watchlist", "Research", "Analytics", "Rebalance", "AI Assistant", "Settings"]
+    default_idx = 0
+    if "_nav_override" in st.session_state:
+        try:
+            default_idx = nav_options.index(st.session_state.pop("_nav_override"))
+        except ValueError:
+            default_idx = 0
+    page = st.radio("Navigation", nav_options, index=default_idx, label_visibility="collapsed")
 
 # Dialog state
 if "show_confirm" not in st.session_state:
@@ -209,8 +219,175 @@ def execute_trade(t):
 
     save_data(st.session_state.data)
 
+# ==================== DASHBOARD ====================
+if page == "Dashboard":
+    st.header("Dashboard")
+
+    # Row 1: Market Overview
+    market = get_market_overview(get_price)
+    idx_cols = st.columns(len(market))
+    for i, idx in enumerate(market):
+        with idx_cols[i]:
+            chg_color = GREEN if idx["change_pct"] >= 0 else RED
+            st.markdown(f"""
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px; text-align:center;">
+                <div style="color:{TEXT2}; font-size:12px;">{idx['name']}</div>
+                <div style="color:{TEXT}; font-size:1.4rem; font-weight:bold;">${idx['price']:,.2f}</div>
+                <div style="color:{chg_color}; font-size:13px;">{idx['change_pct']:+.2f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.divider()
+
+    # Row 2: Portfolio Snapshot + Market Sentiment
+    snap_col, sent_col = st.columns([2, 1])
+
+    with snap_col:
+        st.subheader("Portfolio Snapshot")
+        total = portfolio_value()
+        cash = st.session_state.data["cash"]
+        start = st.session_state.data["starting_balance"]
+        pl = total - start
+
+        sc1, sc2, sc3, sc4 = st.columns(4)
+        sc1.metric("Total Value", f"${total:,.0f}")
+        pl_color = GREEN if pl >= 0 else RED
+        sc2.metric("Total P/L", f"${pl:+,.0f}", f"{pl/start*100:+.1f}%")
+        sc3.metric("Cash", f"${cash:,.0f}")
+        sc4.metric("Invested", f"${total - cash:,.0f}")
+
+        # Mini allocation donut
+        holdings = get_holdings()
+        if holdings:
+            labels = list(holdings.keys()) + ["Cash"]
+            values = [h["shares"] * get_price(tk)[0] for tk, h in holdings.items()] + [cash]
+            fig_mini = go.Figure(data=[go.Pie(
+                labels=labels, values=values, hole=0.5,
+                marker=dict(colors=["#1e3a5f", "#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"][:len(labels)]),
+                textinfo="label+percent", textfont=dict(size=10, color="white"),
+            )])
+            fig_mini.update_layout(
+                height=220, margin=dict(t=5, b=5, l=5, r=5), showlegend=False,
+                paper_bgcolor="rgba(0,0,0,0)",
+                annotations=[dict(text="Allocation", x=0.5, y=0.5, font_size=11, font_color=TEXT, showarrow=False)],
+            )
+            st.plotly_chart(fig_mini, use_container_width=True)
+
+    with sent_col:
+        st.subheader("Market Sentiment")
+        spy_hist = get_history("SPY", "6mo")
+        if not spy_hist.empty:
+            regime = detect_market_regime(spy_hist)
+            regime_color = GREEN if regime["regime"] == "Bullish" else RED if regime["regime"] == "Bearish" else YELLOW
+            st.markdown(f"""
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:20px;">
+                <div style="font-size:1.5rem; font-weight:bold; color:{regime_color};">{regime['regime']}</div>
+                <div style="color:{TEXT2}; margin-top:4px;">S&P 500 Regime</div>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">Confidence: {regime['confidence']}</div>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">{regime['description']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("Unable to fetch market data.")
+
+    st.divider()
+
+    # Row 3: Top Movers + Active Alerts
+    mov_col, alert_col = st.columns(2)
+
+    with mov_col:
+        st.subheader("Top Movers")
+        if holdings:
+            gainers, losers = get_top_movers(holdings, get_price)
+            if gainers:
+                for g in gainers:
+                    st.markdown(f"""
+                    <div style="background:{BG2}; border-left:3px solid {GREEN}; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:6px;">
+                        <span style="color:{TEXT}; font-weight:bold;">{g['ticker']}</span>
+                        <span style="color:{GREEN}; float:right;">{g['change_pct']:+.2f}%</span>
+                        <div style="color:{TEXT2}; font-size:12px;">${g['price']:.2f} | ${g['value']:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            if losers:
+                for l in losers:
+                    st.markdown(f"""
+                    <div style="background:{BG2}; border-left:3px solid {RED}; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:6px;">
+                        <span style="color:{TEXT}; font-weight:bold;">{l['ticker']}</span>
+                        <span style="color:{RED}; float:right;">{l['change_pct']:+.2f}%</span>
+                        <div style="color:{TEXT2}; font-size:12px;">${l['price']:.2f} | ${l['value']:,.0f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            if not gainers and not losers:
+                st.caption("No significant movers today.")
+        else:
+            st.caption("Add holdings to see top movers.")
+
+    with alert_col:
+        st.subheader("Active Alerts")
+        triggered = get_triggered_alerts(
+            st.session_state.data.get("watchlist", []),
+            st.session_state.data.get("price_alerts", {}),
+            get_price,
+        )
+        if triggered:
+            for a in triggered:
+                st.markdown(f"""
+                <div style="background:{BG2}; border-left:3px solid {YELLOW}; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:6px;">
+                    <span style="color:{TEXT}; font-weight:bold;">{a['ticker']}</span>
+                    <span style="color:{YELLOW}; float:right;">Alert!</span>
+                    <div style="color:{TEXT2}; font-size:12px;">Current: ${a['current_price']:.2f} | Target: ${a['alert_price']:.2f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.caption("No triggered alerts. Set alerts on the Watchlist page.")
+
+    st.divider()
+
+    # Row 4: Market News
+    st.subheader("Market News")
+    general_news = get_general_news(limit=5)
+    if general_news:
+        headlines_tuple = tuple(a["title"] for a in general_news)
+        sentiments = analyze_sentiment_batch(headlines_tuple)
+
+        for i, article in enumerate(general_news):
+            sent = sentiments[i] if i < len(sentiments) else {"sentiment": "Neutral", "confidence": 0.0}
+            sent_color = get_sentiment_color(sent["sentiment"], colors)
+            time_str = format_time_ago(article.get("publishedDate", ""))
+            source = article.get("source", "")
+
+            st.markdown(f"""
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div style="flex:1;">
+                        <a href="{article['url']}" target="_blank" style="color:{TEXT}; font-size:14px; text-decoration:none; font-weight:500;">
+                            {article['title']}
+                        </a>
+                        <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">{source}{(' | ' + time_str) if time_str else ''}</div>
+                    </div>
+                    <div style="background:{sent_color}20; color:{sent_color}; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:bold; white-space:nowrap; margin-left:12px;">
+                        {sent['sentiment']}
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.caption("Unable to fetch news. Check your internet connection.")
+
+    st.divider()
+
+    # Row 5: Quick Actions
+    st.subheader("Quick Actions")
+    qa_cols = st.columns(5)
+    qa_pages = [("Trade", "Trade"), ("Research", "Research"), ("Watchlist", "Watchlist"), ("Analytics", "Analytics"), ("AI Assistant", "AI Assistant")]
+    for i, (label, target) in enumerate(qa_pages):
+        with qa_cols[i]:
+            if st.button(label, key=f"qa_{label}", use_container_width=True):
+                st.session_state["_nav_override"] = target
+                st.rerun()
+
 # ==================== PORTFOLIO ====================
-if page == "Portfolio":
+elif page == "Portfolio":
     st.header("Portfolio")
 
     if show_trade_dialog():
@@ -969,31 +1146,50 @@ elif page == "Research":
                 fig.update_yaxes(showgrid=True, gridcolor=BORDER, row=r, col=1)
             st.plotly_chart(fig, use_container_width=True)
 
-            # Latest News
+            # Latest News with Sentiment
             st.divider()
             st.subheader("Latest News")
 
-            company_name = info.get('shortName', ticker).replace(' ', '+')
-            st.markdown(f"""
-            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
-                <a href="https://finance.yahoo.com/quote/{ticker}/news" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
-                    📰 {ticker} News on Yahoo Finance
-                </a>
-                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">Latest news and updates</div>
-            </div>
-            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
-                <a href="https://www.wsj.com/search?query={ticker}" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
-                    📰 {ticker} on Wall Street Journal
-                </a>
-                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">WSJ coverage and analysis</div>
-            </div>
-            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
-                <a href="https://www.google.com/search?q={ticker}+{company_name}+stock+news&tbm=nws" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
-                    📰 {ticker} on Google News
-                </a>
-                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">All recent news articles</div>
-            </div>
-            """, unsafe_allow_html=True)
+            news_articles = get_stock_news(ticker, limit=8)
+            if news_articles:
+                headlines_tuple = tuple(a["title"] for a in news_articles)
+                sentiments = analyze_sentiment_batch(headlines_tuple)
+
+                for i, article in enumerate(news_articles):
+                    sent = sentiments[i] if i < len(sentiments) else {"sentiment": "Neutral", "confidence": 0.0}
+                    sent_color = get_sentiment_color(sent["sentiment"], colors)
+                    time_str = format_time_ago(article.get("publishedDate", ""))
+                    source = article.get("source", "")
+
+                    st.markdown(f"""
+                    <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                            <div style="flex:1;">
+                                <a href="{article['url']}" target="_blank" style="color:{TEXT}; font-size:14px; text-decoration:none; font-weight:500;">
+                                    {article['title']}
+                                </a>
+                                <div style="color:{TEXT2}; font-size:12px; margin-top:4px;">{source} {(' | ' + time_str) if time_str else ''}</div>
+                            </div>
+                            <div style="background:{sent_color}20; color:{sent_color}; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:bold; white-space:nowrap; margin-left:12px;">
+                                {sent['sentiment']}
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            else:
+                company_name = info.get('shortName', ticker).replace(' ', '+')
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                    <a href="https://finance.yahoo.com/quote/{ticker}/news" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
+                        {ticker} News on Yahoo Finance
+                    </a>
+                </div>
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px; margin-bottom:10px;">
+                    <a href="https://www.google.com/search?q={ticker}+{company_name}+stock+news&tbm=nws" target="_blank" style="color:{BLUE}; font-size:14px; text-decoration:none; font-weight:500;">
+                        {ticker} on Google News
+                    </a>
+                </div>
+                """, unsafe_allow_html=True)
 
             # AI Signals Section
             st.divider()
@@ -1219,6 +1415,149 @@ elif page == "Analytics":
             st.dataframe(pd.DataFrame(st.session_state.data["journal"]), use_container_width=True, hide_index=True)
         else:
             st.info("No trades logged yet")
+
+# ==================== REBALANCE ====================
+elif page == "Rebalance":
+    st.header("Portfolio Rebalancer")
+
+    holdings = get_holdings()
+
+    if not holdings:
+        st.info("Add positions first. Go to **Trade** to place your first order.")
+    else:
+        # Current allocation
+        current = compute_current_weights(holdings, get_price)
+        total_invested = current.pop("_total", 0)
+        total_account = total_invested + st.session_state.data["cash"]
+
+        st.subheader("Current Allocation")
+        cur_col1, cur_col2 = st.columns([2, 1])
+
+        with cur_col1:
+            cur_data = []
+            for tk, info_w in current.items():
+                cur_data.append({
+                    "Ticker": tk,
+                    "Shares": f"{info_w['shares']:.2f}",
+                    "Price": f"${info_w['price']:.2f}",
+                    "Value": f"${info_w['value']:,.0f}",
+                    "Weight": f"{info_w['weight_pct']:.1f}%",
+                })
+            st.dataframe(pd.DataFrame(cur_data), use_container_width=True, hide_index=True)
+
+        with cur_col2:
+            st.metric("Invested", f"${total_invested:,.0f}")
+            st.metric("Cash", f"${st.session_state.data['cash']:,.0f}")
+            st.metric("Total", f"${total_account:,.0f}")
+
+        st.divider()
+
+        # Target allocation
+        st.subheader("Target Allocation")
+
+        strategy = st.radio("Strategy", ["Equal Weight", "Custom Weights"], horizontal=True, key="rebal_strategy")
+
+        tickers = list(holdings.keys())
+
+        if strategy == "Equal Weight":
+            targets = generate_equal_weight_targets(tickers)
+            st.caption(f"Each position targets {100/len(tickers):.1f}% of invested value")
+        else:
+            st.caption("Set target weight for each holding (will be normalized to 100%)")
+            custom_weights = {}
+            cols = st.columns(min(len(tickers), 4))
+            for i, tk in enumerate(tickers):
+                with cols[i % min(len(tickers), 4)]:
+                    default_w = current.get(tk, {}).get("weight_pct", 0)
+                    custom_weights[tk] = st.number_input(
+                        f"{tk} %", min_value=0.0, max_value=100.0,
+                        value=round(default_w, 1), step=1.0, key=f"cw_{tk}"
+                    )
+            targets = generate_custom_targets(custom_weights)
+
+        deploy_cash = st.checkbox("Include cash in rebalance (deploy idle cash)", value=True, key="deploy_cash")
+
+        # Current vs Target chart
+        chart_tickers = sorted(set(list(current.keys()) + list(targets.keys())))
+        cur_weights = [current.get(t, {}).get("weight_pct", 0) for t in chart_tickers]
+        tgt_weights = [targets.get(t, 0) for t in chart_tickers]
+
+        fig_rebal = go.Figure()
+        fig_rebal.add_trace(go.Bar(name="Current", x=chart_tickers, y=cur_weights, marker_color=BLUE))
+        fig_rebal.add_trace(go.Bar(name="Target", x=chart_tickers, y=tgt_weights, marker_color=GREEN))
+        fig_rebal.update_layout(
+            barmode="group", height=300, margin=dict(t=20, b=40, l=40, r=20),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            yaxis=dict(title="Weight %", showgrid=True, gridcolor=BORDER),
+            xaxis=dict(showgrid=False),
+            font=dict(color=TEXT2), legend=dict(orientation="h", y=1.1),
+        )
+        st.plotly_chart(fig_rebal, use_container_width=True)
+
+        st.divider()
+
+        # Suggested trades
+        st.subheader("Suggested Trades")
+
+        commission = st.session_state.data["commission_stock"] if st.session_state.data["commission_enabled"] else 0
+        trades = compute_rebalance_trades(holdings, targets, st.session_state.data["cash"], get_price, commission, deploy_cash)
+
+        if trades:
+            trade_data = []
+            for t in trades:
+                action_color = GREEN if t["action"] == "buy" else RED
+                trade_data.append({
+                    "Action": t["action"].upper(),
+                    "Ticker": t["ticker"],
+                    "Shares": f"{t['shares']:.2f}",
+                    "Price": f"${t['price']:.2f}",
+                    "Value": f"${abs(t['value_change']):,.0f}",
+                    "Current %": f"{t['current_weight']:.1f}%",
+                    "Target %": f"{t['target_weight']:.1f}%",
+                })
+            st.dataframe(pd.DataFrame(trade_data), use_container_width=True, hide_index=True)
+
+            # Cost summary
+            cost = estimate_rebalance_cost(trades, commission)
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.metric("Total Buys", f"${cost['total_buys']:,.0f}")
+            cc2.metric("Total Sells", f"${cost['total_sells']:,.0f}")
+            cc3.metric("Net Cash Needed", f"${cost['net_cash_needed']:+,.0f}")
+            cc4.metric("Trades", cost['num_trades'])
+
+            if cost["total_commissions"] > 0:
+                st.caption(f"Estimated commissions: ${cost['total_commissions']:.2f}")
+
+            # Check feasibility
+            can_rebalance = cost["net_cash_needed"] <= st.session_state.data["cash"]
+
+            if not can_rebalance:
+                st.error(f"Insufficient cash. Need ${cost['net_cash_needed']:,.0f}, have ${st.session_state.data['cash']:,.0f}. Try unchecking 'Include cash in rebalance'.")
+
+            st.divider()
+
+            if can_rebalance:
+                if st.button("Execute Rebalance", type="primary", use_container_width=True):
+                    errors = []
+                    for t in trades:
+                        try:
+                            execute_trade({
+                                "ticker": t["ticker"],
+                                "action": t["action"],
+                                "order_type": "market",
+                                "shares": t["shares"],
+                                "price": t["price"],
+                                "notes": "Rebalance",
+                            })
+                        except Exception as e:
+                            errors.append(f"{t['ticker']}: {e}")
+                    if errors:
+                        st.warning(f"Some trades failed: {'; '.join(errors)}")
+                    else:
+                        st.success(f"Rebalance complete! Executed {len(trades)} trades.")
+                    st.rerun()
+        else:
+            st.success("Portfolio is already balanced to target weights.")
 
 # ==================== AI ASSISTANT ====================
 elif page == "AI Assistant":

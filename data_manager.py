@@ -25,6 +25,7 @@ def default_data() -> dict:
         "badges": [],
         "price_alerts": {},
         "colorblind": False,
+        "rebalance_targets": {},
     }
 
 

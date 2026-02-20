@@ -43,12 +43,14 @@ REAL-TIME PRICES:
 {prices_summary if prices_summary else 'No holdings to show prices for.'}
 
 APP NAVIGATION GUIDE:
+- Dashboard: Market overview (S&P 500, Nasdaq, Dow), portfolio snapshot, market sentiment, top movers, active alerts, market news with sentiment, quick actions
 - Portfolio: View holdings, equity curve, sector allocation, P/L, badges
 - Trade: Buy, sell, or short sell S&P 500 stocks with market/limit/stop-loss orders
 - Options: Trade calls and puts, view options chains, see P/L payoff diagrams
 - Watchlist: Track stocks, set price alerts, quick buy
-- Research: Stock charts with technical indicators (RSI, MACD, Bollinger Bands), AI signals (market regime, DCF valuation), multi-timeframe views
+- Research: Stock charts with technical indicators (RSI, MACD, Bollinger Bands), live news with AI sentiment analysis, AI signals (market regime, DCF valuation)
 - Analytics: Risk metrics (Sharpe, VaR, max drawdown), Monte Carlo simulation, correlation matrix, benchmark vs S&P 500, trade journal stats, AI coaching
+- Rebalance: Set target allocations (equal-weight or custom), current vs target comparison, one-click rebalance execution
 - Settings: Dark/light mode, colorblind mode, commissions, account reset
 
 GUIDELINES:
