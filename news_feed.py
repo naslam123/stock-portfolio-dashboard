@@ -20,7 +20,19 @@ def _get_key(name):
     try:
         return st.secrets[name]
     except Exception:
-        return os.environ.get(name)
+        pass
+    key = os.environ.get(name)
+    if key:
+        return key
+    try:
+        import tomllib
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        secrets_path = os.path.join(app_dir, ".streamlit", "secrets.toml")
+        with open(secrets_path, "rb") as f:
+            secrets = tomllib.load(f)
+            return secrets.get(name)
+    except Exception:
+        return None
 
 
 def _parse_google_news_rss(xml_text: str, limit: int) -> list[dict]:

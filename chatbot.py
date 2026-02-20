@@ -23,7 +23,20 @@ def _get_key(name):
     try:
         return st.secrets[name]
     except Exception:
-        return os.environ.get(name)
+        pass
+    key = os.environ.get(name)
+    if key:
+        return key
+    try:
+        import tomllib
+        import os as _os
+        app_dir = _os.path.dirname(_os.path.abspath(__file__))
+        secrets_path = _os.path.join(app_dir, ".streamlit", "secrets.toml")
+        with open(secrets_path, "rb") as f:
+            secrets = tomllib.load(f)
+            return secrets.get(name)
+    except Exception:
+        return None
 
 
 def _build_system_prompt(data, holdings_summary, prices_summary):

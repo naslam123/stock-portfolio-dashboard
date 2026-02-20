@@ -25,12 +25,23 @@ def _get_fmp_key() -> str | None:
         API key string, or None if not configured.
     """
     try:
-        key = st.secrets.get("FMP_API_KEY")
-        if key:
-            return key
+        return st.secrets["FMP_API_KEY"]
     except Exception:
         pass
-    return os.environ.get("FMP_API_KEY")
+    key = os.environ.get("FMP_API_KEY")
+    if key:
+        return key
+    # Last resort: read from secrets.toml directly
+    try:
+        import tomllib
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        secrets_path = os.path.join(app_dir, ".streamlit", "secrets.toml")
+        with open(secrets_path, "rb") as f:
+            secrets = tomllib.load(f)
+            return secrets.get("FMP_API_KEY")
+    except Exception:
+        pass
+    return None
 
 
 # --------------- Price ---------------
