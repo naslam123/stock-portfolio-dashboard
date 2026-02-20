@@ -25,9 +25,12 @@ def _get_fmp_key() -> str | None:
         API key string, or None if not configured.
     """
     try:
-        return st.secrets["FMP_API_KEY"]
+        key = st.secrets.get("FMP_API_KEY")
+        if key:
+            return key
     except Exception:
-        return os.environ.get("FMP_API_KEY")
+        pass
+    return os.environ.get("FMP_API_KEY")
 
 
 # --------------- Price ---------------
