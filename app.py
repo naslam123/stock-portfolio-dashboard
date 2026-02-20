@@ -95,7 +95,7 @@ with st.sidebar:
 
     st.divider()
 
-    if st.button("🔄 Refresh Prices", use_container_width=True, key="refresh_btn"):
+    if st.button("🔄 Refresh Prices", width="stretch", key="refresh_btn"):
         st.cache_data.clear()
         st.rerun()
 
@@ -170,13 +170,13 @@ def show_trade_dialog():
 
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
-                if st.button("✓ Confirm", use_container_width=True, key="confirm_trade"):
+                if st.button("✓ Confirm", width="stretch", key="confirm_trade"):
                     execute_trade(t)
                     st.session_state.show_confirm = False
                     st.session_state.pending_trade = None
                     st.rerun()
             with btn_col2:
-                if st.button("✕ Cancel", use_container_width=True, key="cancel_trade"):
+                if st.button("✕ Cancel", width="stretch", key="cancel_trade"):
                     st.session_state.show_confirm = False
                     st.session_state.pending_trade = None
                     st.rerun()
@@ -271,7 +271,7 @@ if page == "Dashboard":
                 paper_bgcolor="rgba(0,0,0,0)",
                 annotations=[dict(text="Allocation", x=0.5, y=0.5, font_size=11, font_color=TEXT, showarrow=False)],
             )
-            st.plotly_chart(fig_mini, use_container_width=True)
+            st.plotly_chart(fig_mini, width="stretch")
 
     with sent_col:
         st.subheader("Market Sentiment")
@@ -382,7 +382,7 @@ if page == "Dashboard":
     qa_pages = [("Trade", "Trade"), ("Research", "Research"), ("Watchlist", "Watchlist"), ("Analytics", "Analytics"), ("AI Assistant", "AI Assistant")]
     for i, (label, target) in enumerate(qa_pages):
         with qa_cols[i]:
-            if st.button(label, key=f"qa_{label}", use_container_width=True):
+            if st.button(label, key=f"qa_{label}", width="stretch"):
                 st.session_state["_nav_override"] = target
                 st.rerun()
 
@@ -457,7 +457,7 @@ elif page == "Portfolio":
                 xaxis=dict(showgrid=False),
                 font=dict(color=TEXT2), showlegend=False,
             )
-            st.plotly_chart(fig_eq, use_container_width=True)
+            st.plotly_chart(fig_eq, width="stretch")
 
         if holdings:
             df = pd.DataFrame(data)
@@ -473,13 +473,13 @@ elif page == "Portfolio":
 
             with col1:
                 st.subheader("Stock Holdings")
-                st.dataframe(df_show, use_container_width=True, hide_index=True)
+                st.dataframe(df_show, width="stretch", hide_index=True)
 
                 # Quick trade buttons
                 qt_cols = st.columns(min(len(holdings), 6))
                 for i, tk in enumerate(list(holdings.keys())[:6]):
                     with qt_cols[i]:
-                        if st.button(f"Sell {tk}", key=f"qt_sell_{tk}", use_container_width=True):
+                        if st.button(f"Sell {tk}", key=f"qt_sell_{tk}", width="stretch"):
                             price, _, _ = get_price(tk)
                             st.session_state.pending_trade = {
                                 "ticker": tk, "action": "sell", "order_type": "market",
@@ -515,7 +515,7 @@ elif page == "Portfolio":
                     font=dict(color=TEXT2),
                     annotations=[dict(text='Portfolio', x=0.5, y=0.5, font_size=14, font_color=TEXT, showarrow=False)]
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             # Sector Allocation
             sectors = {}
@@ -543,7 +543,7 @@ elif page == "Portfolio":
                     paper_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=TEXT2),
                 )
-                st.plotly_chart(fig_sec, use_container_width=True)
+                st.plotly_chart(fig_sec, width="stretch")
 
         if options_holdings:
             st.subheader("Options Positions")
@@ -568,7 +568,7 @@ elif page == "Portfolio":
                     "P/L %": f"{pl_pct:+.1f}%"
                 })
 
-            st.dataframe(pd.DataFrame(opts_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(opts_data), width="stretch", hide_index=True)
 
         if holdings:
             st.subheader("Performance")
@@ -594,7 +594,7 @@ elif page == "Portfolio":
                     xaxis=dict(showgrid=False),
                     font=dict(color=TEXT2), bargap=0.3
                 )
-                st.plotly_chart(fig1, use_container_width=True)
+                st.plotly_chart(fig1, width="stretch")
 
             with perf_col2:
                 st.markdown(f"""
@@ -625,7 +625,7 @@ elif page == "Portfolio":
 
             col1, col2, col3 = st.columns([1, 1, 2])
             with col1:
-                st.download_button("Export CSV", df_show.to_csv(index=False), "portfolio.csv", use_container_width=True)
+                st.download_button("Export CSV", df_show.to_csv(index=False), "portfolio.csv", width="stretch")
 
         # Achievements
         st.divider()
@@ -658,13 +658,13 @@ elif page == "Portfolio":
 
         with st.expander("Stock Transaction History"):
             if st.session_state.data["portfolio"]:
-                st.dataframe(pd.DataFrame(st.session_state.data["portfolio"]), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(st.session_state.data["portfolio"]), width="stretch", hide_index=True)
             else:
                 st.info("No stock transactions yet")
 
         with st.expander("Options Transaction History"):
             if st.session_state.data["options"]:
-                st.dataframe(pd.DataFrame(st.session_state.data["options"]), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(st.session_state.data["options"]), width="stretch", hide_index=True)
             else:
                 st.info("No options transactions yet")
 
@@ -769,7 +769,7 @@ elif page == "Trade":
             action_map = {"Buy": "buy", "Sell": "sell", "Short Sell": "short", "Cover Short": "cover"}
 
             if can_trade:
-                if st.button(f"Preview {action.upper()} Order", type="primary", use_container_width=True):
+                if st.button(f"Preview {action.upper()} Order", type="primary", width="stretch"):
                     st.session_state.pending_trade = {
                         "ticker": ticker,
                         "action": action_map[action],
@@ -829,7 +829,7 @@ elif page == "Options":
                 df_show["IV"] = (df_show["IV"] * 100).round(1).astype(str) + "%"
 
                 st.subheader(f"{opt_type} Options Chain")
-                st.dataframe(df_show.head(15), use_container_width=True, hide_index=True)
+                st.dataframe(df_show.head(15), width="stretch", hide_index=True)
 
                 st.subheader("Place Order")
                 c1, c2, c3 = st.columns(3)
@@ -853,7 +853,7 @@ elif page == "Options":
                 </div>
                 """, unsafe_allow_html=True)
 
-                if st.button("Execute Options Order", type="primary", use_container_width=True):
+                if st.button("Execute Options Order", type="primary", width="stretch"):
                     if total <= st.session_state.data["cash"]:
                         st.session_state.data["cash"] -= total
                         st.session_state.data["options"].append({
@@ -903,7 +903,7 @@ elif page == "Options":
                     yaxis=dict(title="Profit / Loss", showgrid=True, gridcolor=BORDER, tickprefix="$"),
                     font=dict(color=TEXT2), hovermode="x unified", showlegend=False,
                 )
-                st.plotly_chart(fig_pl, use_container_width=True)
+                st.plotly_chart(fig_pl, width="stretch")
 
                 mc1, mc2, mc3 = st.columns(3)
                 mc1.metric("Breakeven", f"${breakeven:.2f}")
@@ -929,7 +929,7 @@ elif page == "Watchlist":
         )
     with col2:
         st.write("")
-        if sel and st.button("Add", type="primary", use_container_width=True):
+        if sel and st.button("Add", type="primary", width="stretch"):
             tk = sel.split(" - ")[0]
             if tk not in st.session_state.data["watchlist"]:
                 st.session_state.data["watchlist"].append(tk)
@@ -962,14 +962,14 @@ elif page == "Watchlist":
                 "52W Low": f"${info.get('fiftyTwoWeekLow', 0):.2f}",
                 "Alert": alert_status,
             })
-        st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(data), width="stretch", hide_index=True)
 
         # Quick Buy buttons
         st.subheader("Quick Buy")
         qb_cols = st.columns(min(len(wl), 6))
         for i, tk in enumerate(wl[:6]):
             with qb_cols[i]:
-                if st.button(f"Buy {tk}", key=f"wb_{tk}", use_container_width=True):
+                if st.button(f"Buy {tk}", key=f"wb_{tk}", width="stretch"):
                     price, _, _ = get_price(tk)
                     st.session_state.pending_trade = {
                         "ticker": tk, "action": "buy", "order_type": "market",
@@ -989,7 +989,7 @@ elif page == "Watchlist":
             alert_target = st.number_input("Target Price ($)", min_value=0.01, value=100.0, step=1.0, key="alert_price")
         with al_col3:
             st.write("")
-            if alert_ticker != "--" and st.button("Set Alert", use_container_width=True):
+            if alert_ticker != "--" and st.button("Set Alert", width="stretch"):
                 st.session_state.data.setdefault("price_alerts", {})[alert_ticker] = alert_target
                 save_data(st.session_state.data)
                 st.success(f"Alert set for {alert_ticker} at ${alert_target:.2f}")
@@ -1002,7 +1002,7 @@ elif page == "Watchlist":
             rem = st.selectbox("Remove", ["--"] + wl)
         with col2:
             st.write("")
-            if rem != "--" and st.button("Remove", use_container_width=True):
+            if rem != "--" and st.button("Remove", width="stretch"):
                 st.session_state.data["watchlist"].remove(rem)
                 st.session_state.data.get("price_alerts", {}).pop(rem, None)
                 save_data(st.session_state.data)
@@ -1144,7 +1144,7 @@ elif page == "Research":
             for r in range(2, total_rows + 1):
                 fig.update_xaxes(showgrid=False, row=r, col=1)
                 fig.update_yaxes(showgrid=True, gridcolor=BORDER, row=r, col=1)
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Latest News with Sentiment
             st.divider()
@@ -1280,7 +1280,7 @@ elif page == "Analytics":
                 font=dict(color=TEXT2), hovermode="x unified",
                 legend=dict(orientation="h", y=1.1),
             )
-            st.plotly_chart(fig_bm, use_container_width=True)
+            st.plotly_chart(fig_bm, width="stretch")
         else:
             st.info("Need at least 2 days of portfolio history for benchmark comparison.")
 
@@ -1357,7 +1357,7 @@ elif page == "Analytics":
                     font=dict(color=TEXT2), hovermode="x unified",
                     legend=dict(orientation="h", y=1.12),
                 )
-                st.plotly_chart(fig_mc, use_container_width=True)
+                st.plotly_chart(fig_mc, width="stretch")
 
         st.divider()
 
@@ -1377,7 +1377,7 @@ elif page == "Analytics":
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                     font=dict(color=TEXT2),
                 )
-                st.plotly_chart(fig_corr, use_container_width=True)
+                st.plotly_chart(fig_corr, width="stretch")
         else:
             st.info("Need 2+ holdings for correlation analysis.")
 
@@ -1408,13 +1408,13 @@ elif page == "Analytics":
                          paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                          yaxis=dict(title="Weight %", showgrid=True, gridcolor=BORDER),
                          font=dict(color=TEXT2))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         st.divider()
         st.subheader("Trade Journal")
 
         if st.session_state.data["journal"]:
-            st.dataframe(pd.DataFrame(st.session_state.data["journal"]), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(st.session_state.data["journal"]), width="stretch", hide_index=True)
         else:
             st.info("No trades logged yet")
 
@@ -1445,7 +1445,7 @@ elif page == "Rebalance":
                     "Value": f"${info_w['value']:,.0f}",
                     "Weight": f"{info_w['weight_pct']:.1f}%",
                 })
-            st.dataframe(pd.DataFrame(cur_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(cur_data), width="stretch", hide_index=True)
 
         with cur_col2:
             st.metric("Invested", f"${total_invested:,.0f}")
@@ -1494,7 +1494,7 @@ elif page == "Rebalance":
             xaxis=dict(showgrid=False),
             font=dict(color=TEXT2), legend=dict(orientation="h", y=1.1),
         )
-        st.plotly_chart(fig_rebal, use_container_width=True)
+        st.plotly_chart(fig_rebal, width="stretch")
 
         st.divider()
 
@@ -1517,7 +1517,7 @@ elif page == "Rebalance":
                     "Current %": f"{t['current_weight']:.1f}%",
                     "Target %": f"{t['target_weight']:.1f}%",
                 })
-            st.dataframe(pd.DataFrame(trade_data), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(trade_data), width="stretch", hide_index=True)
 
             # Cost summary
             cost = estimate_rebalance_cost(trades, commission)
@@ -1539,7 +1539,7 @@ elif page == "Rebalance":
             st.divider()
 
             if can_rebalance:
-                if st.button("Execute Rebalance", type="primary", use_container_width=True):
+                if st.button("Execute Rebalance", type="primary", width="stretch"):
                     errors = []
                     for t in trades:
                         try:
@@ -1591,7 +1591,7 @@ elif page == "AI Assistant":
         cols = st.columns(2)
         for i, (label, prompt) in enumerate(prompts):
             with cols[i % 2]:
-                if st.button(label, key=f"prompt_{i}", use_container_width=True):
+                if st.button(label, key=f"prompt_{i}", width="stretch"):
                     st.session_state.chat_history.append({"role": "user", "content": prompt})
                     holdings_summary, prices_summary = build_portfolio_context(
                         st.session_state.data, get_price, get_holdings
@@ -1636,7 +1636,7 @@ elif page == "AI Assistant":
         st.divider()
         cc1, cc2, cc3 = st.columns([1, 1, 4])
         with cc1:
-            if st.button("Clear Chat", use_container_width=True, key="clear_chat"):
+            if st.button("Clear Chat", width="stretch", key="clear_chat"):
                 st.session_state.chat_history = []
                 st.rerun()
         with cc2:
