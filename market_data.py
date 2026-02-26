@@ -63,26 +63,44 @@ def get_price(ticker: str) -> tuple[float, float, float]:
         try:
             url = f"{FMP_STABLE_URL}/quote?symbol={ticker}&apikey={key}"
             resp = requests.get(url, timeout=5)
-            data = resp.json()
-            if data and isinstance(data, list) and len(data) > 0:
-                item = data[0]
-                price = item.get("price", 0)
-                if price:
-                    prev = item.get("previousClose", price)
-                    chg = price - prev
-                    pct = (chg / prev * 100) if prev else 0
-                    return price, chg, pct
+            if resp.ok:
+                data = resp.json()
+                if data and isinstance(data, list) and len(data) > 0:
+                    item = data[0]
+                    price = item.get("price", 0)
+                    if price:
+                        prev = item.get("previousClose", price)
+                        chg = price - prev
+                        pct = (chg / prev * 100) if prev else 0
+                        return price, chg, pct
         except Exception:
             pass  # Fall through to yfinance
 
-    # yfinance fallback
+    # yfinance info fallback
     try:
         info = yf.Ticker(ticker).info
         price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-        prev = info.get("previousClose", price)
-        return price, price - prev, ((price - prev) / prev * 100) if prev else 0
+        if price:
+            prev = info.get("previousClose", price)
+            return price, price - prev, ((price - prev) / prev * 100) if prev else 0
     except Exception:
-        return 0, 0, 0
+        pass
+
+    # yfinance history fallback (last close price)
+    try:
+        hist = yf.Ticker(ticker).history(period="5d")
+        if not hist.empty and "Close" in hist.columns:
+            price = float(hist["Close"].iloc[-1])
+            if len(hist) >= 2:
+                prev = float(hist["Close"].iloc[-2])
+                chg = price - prev
+                pct = (chg / prev * 100) if prev else 0
+                return price, chg, pct
+            return price, 0, 0
+    except Exception:
+        pass
+
+    return 0, 0, 0
 
 
 # --------------- Info ---------------
@@ -127,6 +145,8 @@ def get_history(ticker: str, period: str = "6mo") -> pd.DataFrame:
                 f"?symbol={ticker}&apikey={key}"
             )
             resp = requests.get(url, timeout=10)
+            if not resp.ok:
+                raise ValueError(f"FMP returned {resp.status_code}")
             data = resp.json()
             if isinstance(data, list) and len(data) > 0:
                 df = pd.DataFrame(data)
@@ -211,6 +231,9 @@ def get_financial_data(ticker: str) -> dict:
     for name, url in endpoints.items():
         try:
             resp = requests.get(url, timeout=10)
+            if not resp.ok:
+                result[name] = []
+                continue
             data = resp.json()
             if isinstance(data, list) and data:
                 result[name] = data[:5]  # Last 5 years
@@ -243,16 +266,21 @@ def get_analyst_data(ticker: str) -> dict:
     try:
         url = f"{FMP_STABLE_URL}/analyst-estimates?symbol={ticker}&period=annual&apikey={key}"
         resp = requests.get(url, timeout=10)
-        data = resp.json()
-        if isinstance(data, list) and data:
-            result["estimates"] = data[:3]
-        elif isinstance(data, dict) and "error" in str(data).lower():
-            result["error"] = f"FMP: {data}"
+        if resp.ok:
+            data = resp.json()
+            if isinstance(data, list) and data:
+                result["estimates"] = data[:3]
+            elif isinstance(data, dict) and "error" in str(data).lower():
+                result["error"] = f"FMP: {data}"
+        else:
+            result["error"] = "FMP API rate-limited"
     except Exception as e:
         result["error"] = f"estimates: {e}"
     try:
         url = f"{FMP_STABLE_URL}/discounted-cash-flow?symbol={ticker}&apikey={key}"
         resp = requests.get(url, timeout=10)
+        if not resp.ok:
+            raise ValueError(f"FMP returned {resp.status_code}")
         data = resp.json()
         if isinstance(data, list) and data:
             result["dcf"] = data[0].get("dcf", 0)

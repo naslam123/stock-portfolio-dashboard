@@ -259,14 +259,18 @@ if page == "Dashboard":
 
     # Row 1: Market Overview
     market = get_market_overview(get_price)
+    all_zero = all(idx["price"] == 0 for idx in market)
+    if all_zero:
+        st.warning("Market data unavailable — APIs may be rate-limited. Click **Refresh Prices** in the sidebar to retry.")
     idx_cols = st.columns(len(market))
     for i, idx in enumerate(market):
         with idx_cols[i]:
             chg_color = GREEN if idx["change_pct"] >= 0 else RED
+            price_str = f"${idx['price']:,.2f}" if idx["price"] else "—"
             st.markdown(f"""
             <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px; text-align:center;">
                 <div style="color:{TEXT2}; font-size:12px;">{idx['name']}</div>
-                <div style="color:{TEXT}; font-size:1.4rem; font-weight:bold;">${idx['price']:,.2f}</div>
+                <div style="color:{TEXT}; font-size:1.4rem; font-weight:bold;">{price_str}</div>
                 <div style="color:{chg_color}; font-size:13px;">{idx['change_pct']:+.2f}%</div>
             </div>
             """, unsafe_allow_html=True)
@@ -303,6 +307,7 @@ if page == "Dashboard":
             fig_mini.update_layout(
                 height=220, margin=dict(t=5, b=5, l=5, r=5), showlegend=False,
                 paper_bgcolor="rgba(0,0,0,0)",
+                font=dict(color=TEXT2),
                 annotations=[dict(text="Allocation", x=0.5, y=0.5, font_size=11, font_color=TEXT, showarrow=False)],
             )
             st.plotly_chart(fig_mini, width="stretch")
@@ -1068,21 +1073,26 @@ elif page == "Research":
         period_map = {"1W": "5d", "1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "5Y": "5y"}
         df = get_history(ticker, period_map[timeframe])
 
-        if info and not df.empty:
-            col1, col2 = st.columns([2, 1])
-            with col1:
-                st.subheader(f"{ticker} - {info.get('shortName', '')}")
-            with col2:
-                st.metric("Price", f"${price:.2f}", f"{pct:+.2f}%")
+        if not df.empty:
+            if info:
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.subheader(f"{ticker} - {info.get('shortName', '')}")
+                with col2:
+                    st.metric("Price", f"${price:.2f}", f"{pct:+.2f}%")
 
-            st.divider()
+                st.divider()
 
-            c1, c2, c3, c4 = st.columns(4)
-            cap = info.get('marketCap', 0)
-            c1.metric("Market Cap", f"${cap/1e9:.1f}B" if cap else "N/A")
-            c2.metric("P/E", f"{info.get('trailingPE', 0):.1f}" if info.get('trailingPE') else "N/A")
-            c3.metric("52W High", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
-            c4.metric("52W Low", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
+                c1, c2, c3, c4 = st.columns(4)
+                cap = info.get('marketCap', 0)
+                c1.metric("Market Cap", f"${cap/1e9:.1f}B" if cap else "N/A")
+                c2.metric("P/E", f"{info.get('trailingPE', 0):.1f}" if info.get('trailingPE') else "N/A")
+                c3.metric("52W High", f"${info.get('fiftyTwoWeekHigh', 0):.2f}")
+                c4.metric("52W Low", f"${info.get('fiftyTwoWeekLow', 0):.2f}")
+            else:
+                st.subheader(ticker)
+                if price:
+                    st.metric("Price", f"${price:.2f}", f"{pct:+.2f}%")
 
             st.divider()
 
@@ -1277,6 +1287,8 @@ elif page == "Research":
                     st.info("Add FMP_API_KEY in .streamlit/secrets.toml to enable DCF valuation.")
                 else:
                     st.warning(f"DCF data unavailable. {analyst_data.get('error', 'FMP API may be rate-limited.')}")
+        else:
+            st.warning(f"Unable to load price data for {ticker}. The API may be rate-limited — try again shortly.")
 
 # ==================== ANALYTICS ====================
 elif page == "Analytics":
