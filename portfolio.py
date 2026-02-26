@@ -17,7 +17,13 @@ def get_holdings() -> dict:
             holdings[tk]["shares"] += t["shares"]
             holdings[tk]["cost"] += t["shares"] * t["price"]
         else:
-            holdings[tk]["shares"] -= t["shares"]
+            # Reduce cost proportionally using average cost basis
+            h = holdings[tk]
+            sell_shares = min(t["shares"], h["shares"])
+            if h["shares"] > 0:
+                avg_cost = h["cost"] / h["shares"]
+                h["cost"] -= sell_shares * avg_cost
+            h["shares"] -= sell_shares
     return {k: v for k, v in holdings.items() if v["shares"] > 0.001}
 
 

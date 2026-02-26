@@ -6,3 +6,5 @@ trading_data.json
 venv/
 .venv/
 .streamlit/secrets.toml
+trading_data.db
+*.bak

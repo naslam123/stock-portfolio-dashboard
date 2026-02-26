@@ -189,6 +189,40 @@ def get_option_chain_data(ticker: str, exp_date: str, opt_type: str) -> pd.DataF
         return pd.DataFrame()
 
 
+# --------------- Financial Statements (FMP stable) ---------------
+
+@st.cache_data(ttl=600)
+def get_financial_data(ticker: str) -> dict:
+    """Fetch income statement, cash flow, and balance sheet from FMP.
+
+    Returns:
+        Dict with keys: income (list), cashflow (list), balance (list).
+        Returns {"error": "reason"} on failure.
+    """
+    key = _get_fmp_key()
+    if not key:
+        return {"error": "no_key"}
+    result = {}
+    endpoints = {
+        "income": f"{FMP_STABLE_URL}/income-statement?symbol={ticker}&period=annual&apikey={key}",
+        "cashflow": f"{FMP_STABLE_URL}/cash-flow-statement?symbol={ticker}&period=annual&apikey={key}",
+        "balance": f"{FMP_STABLE_URL}/balance-sheet-statement?symbol={ticker}&period=annual&apikey={key}",
+    }
+    for name, url in endpoints.items():
+        try:
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            if isinstance(data, list) and data:
+                result[name] = data[:5]  # Last 5 years
+            else:
+                result[name] = []
+        except Exception:
+            result[name] = []
+    if not any(result.get(k) for k in ["income", "cashflow", "balance"]):
+        result["error"] = "No financial data available"
+    return result
+
+
 # --------------- Analyst Estimates & DCF (FMP stable) ---------------
 
 @st.cache_data(ttl=300)

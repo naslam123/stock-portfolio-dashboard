@@ -1,3 +1,23 @@
+"""
+Stock Portfolio Trading Simulator — Streamlit application.
+
+Main orchestrator for a 10-page trading simulator built for MGMT 590
+(Mastering AI for Finance) at Purdue University. Features include:
+
+- Dashboard: Market overview, portfolio snapshot, sentiment, news
+- Portfolio: Holdings, equity curve, sector allocation, achievements
+- Trade: Buy/sell/short with market/limit/stop-loss orders
+- Options: Options chains, trading, P/L payoff diagrams
+- Watchlist: Price tracking and alerts
+- Research: Charts, technical indicators, AI signals (ML regime, custom DCF)
+- Analytics: Risk metrics, Monte Carlo, correlation, AI coaching
+- Rebalance: Target allocation and one-click rebalancing
+- AI Assistant: LLM chatbot (Groq/Gemini) with portfolio context
+- Settings: Theme, commissions, account management
+
+Data persisted via SQLite (auto-migrated from JSON).
+"""
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -10,6 +30,7 @@ from data_manager import default_data, load_data, save_data
 from market_data import (
     get_price, get_info, get_history,
     get_option_dates, get_option_chain_data, get_analyst_data,
+    get_financial_data,
 )
 from portfolio import (
     get_holdings, get_options_holdings, get_option_current_price,
@@ -51,6 +72,10 @@ st.markdown(render_css(colors), unsafe_allow_html=True)
 
 # Snapshot portfolio value for equity curve (once per session per day)
 def _snapshot_portfolio():
+    """Record today's portfolio value for the equity curve chart.
+
+    Only appends one entry per calendar day to avoid duplicates.
+    """
     today = datetime.now().strftime("%Y-%m-%d")
     hist = st.session_state.data.get("portfolio_history", [])
     if not hist or hist[-1].get("date") != today:
@@ -65,7 +90,7 @@ if st.session_state.data.get("portfolio") or st.session_state.data.get("options"
     _snapshot_portfolio()
 
 # Badge toast notifications for newly earned badges
-current_badges = check_badges(st.session_state.data)
+current_badges = check_badges(st.session_state.data, portfolio_value=portfolio_value())
 prev_badges = st.session_state.data.get("badges", [])
 new_badges = [b for b in current_badges if b not in prev_badges]
 if new_badges:
@@ -113,7 +138,7 @@ with st.sidebar:
     col2.metric("Invested", f"${total-cash:,.0f}")
 
     # Badges
-    badges = check_badges(st.session_state.data)
+    badges = check_badges(st.session_state.data, portfolio_value=total)
     if badges:
         st.divider()
         st.markdown(f"<div style='color:{TEXT}; font-weight:bold; font-size:13px;'>Badges Earned</div>", unsafe_allow_html=True)
@@ -144,6 +169,10 @@ if "pending_trade" not in st.session_state:
     st.session_state.pending_trade = None
 
 def show_trade_dialog():
+    """Render the order confirmation dialog when a trade is pending.
+
+    Returns True if dialog is shown (caller should st.stop()), False otherwise.
+    """
     if st.session_state.show_confirm and st.session_state.pending_trade:
         t = st.session_state.pending_trade
         commission = st.session_state.data["commission_stock"] if st.session_state.data["commission_enabled"] else 0
@@ -184,6 +213,11 @@ def show_trade_dialog():
     return False
 
 def execute_trade(t):
+    """Execute a confirmed trade: update cash, append to portfolio and journal.
+
+    Args:
+        t: Trade dict with keys: ticker, action, order_type, shares, price, notes.
+    """
     commission = st.session_state.data["commission_stock"] if st.session_state.data["commission_enabled"] else 0
     total = t["shares"] * t["price"]
 
@@ -309,12 +343,12 @@ if page == "Dashboard":
                     </div>
                     """, unsafe_allow_html=True)
             if losers:
-                for l in losers:
+                for loser in losers:
                     st.markdown(f"""
                     <div style="background:{BG2}; border-left:3px solid {RED}; border-radius:0 8px 8px 0; padding:10px 14px; margin-bottom:6px;">
-                        <span style="color:{TEXT}; font-weight:bold;">{l['ticker']}</span>
-                        <span style="color:{RED}; float:right;">{l['change_pct']:+.2f}%</span>
-                        <div style="color:{TEXT2}; font-size:12px;">${l['price']:.2f} | ${l['value']:,.0f}</div>
+                        <span style="color:{TEXT}; font-weight:bold;">{loser['ticker']}</span>
+                        <span style="color:{RED}; float:right;">{loser['change_pct']:+.2f}%</span>
+                        <div style="color:{TEXT2}; font-size:12px;">${loser['price']:.2f} | ${loser['value']:,.0f}</div>
                     </div>
                     """, unsafe_allow_html=True)
             if not gainers and not losers:
@@ -445,7 +479,7 @@ elif page == "Portfolio":
             fig_eq.add_trace(go.Scatter(
                 x=eq_df["date"], y=eq_df["value"], name="Portfolio",
                 line=dict(color=BLUE, width=2), fill="tozeroy",
-                fillcolor=f"rgba(37,99,235,0.1)"
+                fillcolor="rgba(37,99,235,0.1)"
             ))
             fig_eq.add_hline(y=st.session_state.data["starting_balance"],
                             line_dash="dash", line_color=TEXT2, annotation_text="Starting Balance")
@@ -631,7 +665,7 @@ elif page == "Portfolio":
         st.divider()
         st.subheader("Achievements")
         all_badge_names = [name for name, _ in BADGE_DEFS]
-        earned = check_badges(st.session_state.data)
+        earned = check_badges(st.session_state.data, portfolio_value=total_account)
         badge_cols = st.columns(len(all_badge_names))
         for i, name in enumerate(all_badge_names):
             meta = BADGE_META.get(name, {})
@@ -1201,9 +1235,14 @@ elif page == "Research":
                 st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>Market Regime</div>", unsafe_allow_html=True)
                 regime = detect_market_regime(df)
                 regime_color = GREEN if regime["regime"] == "Bullish" else RED if regime["regime"] == "Bearish" else YELLOW
+                model_badge = regime.get("model_type", "SMA")
+                model_color = BLUE if model_badge == "ML" else TEXT2
                 st.markdown(f"""
                 <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
-                    <div style="font-size:1.4rem; font-weight:bold; color:{regime_color};">{regime['regime']}</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:{regime_color};">{regime['regime']}</div>
+                        <div style="background:{model_color}20; color:{model_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold;">{model_badge} Model</div>
+                    </div>
                     <div style="color:{TEXT2}; margin-top:4px;">Confidence: {regime['confidence']} | Strength: {regime['signal_strength']:.0%}</div>
                     <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{regime['description']}</div>
                 </div>
@@ -1212,12 +1251,24 @@ elif page == "Research":
             with sig_col2:
                 st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>DCF Valuation</div>", unsafe_allow_html=True)
                 analyst_data = get_analyst_data(ticker)
-                if analyst_data.get("dcf") is not None:
-                    valuation = analyze_valuation(analyst_data)
+                fin_data = get_financial_data(ticker)
+                shares_out = info.get("sharesOutstanding", 0) or 0
+                valuation = analyze_valuation(
+                    analyst_data,
+                    financial_data=fin_data if not fin_data.get("error") else None,
+                    stock_price=price,
+                    shares_outstanding=shares_out,
+                )
+                if valuation["signal"] != "N/A":
                     val_color = GREEN if valuation["signal"] == "Undervalued" else RED if valuation["signal"] == "Overvalued" else YELLOW
+                    dcf_model = valuation.get("model_type", "FMP API")
+                    dcf_model_color = BLUE if dcf_model == "Custom DCF" else TEXT2
                     st.markdown(f"""
                     <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
-                        <div style="font-size:1.4rem; font-weight:bold; color:{val_color};">{valuation['signal']}</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-size:1.4rem; font-weight:bold; color:{val_color};">{valuation['signal']}</div>
+                            <div style="background:{dcf_model_color}20; color:{dcf_model_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold;">{dcf_model}</div>
+                        </div>
                         <div style="color:{TEXT2}; margin-top:4px;">DCF: ${valuation['dcf']:,.2f} | Margin: {valuation['margin_of_safety']:+.1f}%</div>
                         <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{valuation['description']}</div>
                     </div>
@@ -1290,7 +1341,8 @@ elif page == "Analytics":
         st.subheader("Risk Metrics")
 
         portfolio_returns = build_portfolio_daily_returns(
-            holdings, get_history, st.session_state.data["starting_balance"]
+            holdings, get_history, st.session_state.data["starting_balance"],
+            get_price_fn=get_price
         )
 
         if not portfolio_returns.empty:
@@ -1385,7 +1437,13 @@ elif page == "Analytics":
 
         # AI Coaching Tips
         st.subheader("AI Trading Coach")
-        tips = generate_coaching_tips(st.session_state.data, holdings)
+        tips, tips_source = generate_coaching_tips(st.session_state.data, holdings)
+        source_color = BLUE if tips_source == "LLM" else TEXT2
+        st.markdown(f"""
+        <div style="display:inline-block; background:{source_color}20; color:{source_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold; margin-bottom:8px;">
+            {tips_source} Powered
+        </div>
+        """, unsafe_allow_html=True)
         for tip in tips:
             st.markdown(f"""
             <div style="background:{BG2}; border-left:3px solid {BLUE}; padding:12px 16px; margin-bottom:8px; border-radius:0 8px 8px 0;">

@@ -30,12 +30,33 @@ def compute_var_historical(daily_returns, confidence=0.95, portfolio_val=100000.
     return float(abs(np.percentile(daily_returns, (1 - confidence) * 100)) * portfolio_val)
 
 
-def build_portfolio_daily_returns(holdings, get_history_fn, starting_balance):
-    """Build weighted daily returns for the portfolio."""
+def build_portfolio_daily_returns(holdings, get_history_fn, starting_balance, get_price_fn=None):
+    """Build weighted daily returns for the portfolio.
+
+    Args:
+        holdings: Dict of {ticker: {shares, cost}}.
+        get_history_fn: Function to fetch price history.
+        starting_balance: Account starting balance.
+        get_price_fn: Optional price function for market-value weights.
+            When provided, weights use shares * current_price instead of cost.
+    """
     if not holdings:
         return pd.Series(dtype=float)
-    total_invested = sum(v["cost"] for v in holdings.values())
-    if total_invested == 0:
+
+    # Compute weights: market-value if price function provided, else cost-basis
+    if get_price_fn:
+        market_values = {}
+        for ticker, h in holdings.items():
+            try:
+                price, _, _ = get_price_fn(ticker)
+                market_values[ticker] = h["shares"] * price
+            except Exception:
+                market_values[ticker] = h["cost"]
+        total_value = sum(market_values.values())
+    else:
+        total_value = sum(v["cost"] for v in holdings.values())
+
+    if total_value == 0:
         return pd.Series(dtype=float)
 
     all_returns, weights = {}, {}
@@ -47,7 +68,10 @@ def build_portfolio_daily_returns(holdings, get_history_fn, starting_balance):
         if close.index.tz is not None:
             close = close.tz_localize(None)
         all_returns[ticker] = close.pct_change().dropna()
-        weights[ticker] = h["cost"] / total_invested
+        if get_price_fn:
+            weights[ticker] = market_values.get(ticker, 0) / total_value
+        else:
+            weights[ticker] = h["cost"] / total_value
 
     if not all_returns:
         return pd.Series(dtype=float)

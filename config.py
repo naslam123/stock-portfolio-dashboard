@@ -6,6 +6,7 @@ from sp500_tickers import SP500
 
 TICKER_OPTIONS = [""] + [f"{t} - {n}" for t, n in SP500.items()]
 DATA_FILE = "trading_data.json"
+DB_FILE = "trading_data.db"
 FMP_BASE_URL = "https://financialmodelingprep.com/api/v3"
 
 
