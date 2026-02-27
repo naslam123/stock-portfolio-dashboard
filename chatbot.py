@@ -1,10 +1,16 @@
 """
-AI Trading Assistant — Groq (free) primary, Gemini fallback.
+AI Trading Assistant — OpenAI (primary), Groq (fallback), Gemini (last resort).
 Provides portfolio-aware responses using real-time data.
 """
 
 import os
 import streamlit as st
+
+try:
+    from openai import OpenAI
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
 
 try:
     from groq import Groq
@@ -107,8 +113,29 @@ def build_portfolio_context(data, get_price_fn, get_holdings_fn):
     return holdings_summary, prices_summary
 
 
+def _call_openai(system_prompt, user_msg, history):
+    """Call OpenAI API (gpt-4o-mini — fast, cheap, high quality)."""
+    key = _get_key("OPENAI_API_KEY")
+    if not key:
+        return None
+    client = OpenAI(api_key=key)
+    messages = [{"role": "system", "content": system_prompt}]
+    for msg in history[-8:]:
+        role = "assistant" if msg["role"] == "model" else msg["role"]
+        messages.append({"role": role, "content": msg["content"]})
+    messages.append({"role": "user", "content": user_msg})
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        max_tokens=500,
+        temperature=0.7,
+    )
+    return response.choices[0].message.content
+
+
 def _call_groq(system_prompt, user_msg, history):
-    """Call Groq API (free tier: Llama 3.3 70B)."""
+    """Call Groq API (free tier: Llama 3.3 70B). Fallback provider."""
     key = _get_key("GROQ_API_KEY")
     if not key:
         return None
@@ -147,11 +174,20 @@ def _call_gemini(system_prompt, user_msg, history):
 
 
 def get_ai_response(user_msg, data, holdings_summary, prices_summary):
-    """Try Groq first, then Gemini. Returns response text."""
+    """Try OpenAI first, then Groq, then Gemini. Returns response text."""
     system_prompt = _build_system_prompt(data, holdings_summary, prices_summary)
     history = st.session_state.get("chat_history", [])
 
-    # Try Groq first (free, fast)
+    # Try OpenAI first (reliable, cheap)
+    if OPENAI_AVAILABLE:
+        try:
+            resp = _call_openai(system_prompt, user_msg, history)
+            if resp:
+                return resp
+        except Exception:
+            pass
+
+    # Fallback to Groq (free)
     if GROQ_AVAILABLE:
         try:
             resp = _call_groq(system_prompt, user_msg, history)
@@ -160,7 +196,7 @@ def get_ai_response(user_msg, data, holdings_summary, prices_summary):
         except Exception:
             pass
 
-    # Fallback to Gemini
+    # Last resort: Gemini
     if GEMINI_AVAILABLE:
         try:
             resp = _call_gemini(system_prompt, user_msg, history)
@@ -169,8 +205,8 @@ def get_ai_response(user_msg, data, holdings_summary, prices_summary):
         except Exception:
             pass
 
-    return ("Add a free API key to `.streamlit/secrets.toml`:\n\n"
-            "**Groq (recommended):** `GROQ_API_KEY = \"your-key\"`\n"
-            "Get one free at [console.groq.com](https://console.groq.com)\n\n"
-            "**Or Gemini:** `GEMINI_API_KEY = \"your-key\"`\n"
-            "Get one free at [aistudio.google.com/apikey](https://aistudio.google.com/apikey)")
+    return ("Add an API key to `.streamlit/secrets.toml`:\n\n"
+            "**OpenAI (recommended):** `OPENAI_API_KEY = \"your-key\"`\n"
+            "Get one at [platform.openai.com](https://platform.openai.com)\n\n"
+            "**Or Groq (free):** `GROQ_API_KEY = \"your-key\"`\n"
+            "Get one free at [console.groq.com](https://console.groq.com)")

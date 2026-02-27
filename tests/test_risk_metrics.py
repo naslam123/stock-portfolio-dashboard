@@ -27,12 +27,14 @@ class TestSharpeRatio:
 
 class TestVaR:
     def test_var_historical(self):
-        """VaR should return a positive dollar value."""
+        """VaR should return dict with positive dollar and percent values."""
         np.random.seed(42)
         returns = pd.Series(np.random.normal(0.0, 0.02, 252))
         var = compute_var_historical(returns, confidence=0.95,
                                      portfolio_val=100000)
-        assert var > 0
+        assert var["dollar"] > 0
+        assert var["percent"] > 0
+        assert var["confidence"] == 0.95
 
 
 class TestMonteCarlo:

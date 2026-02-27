@@ -7,23 +7,31 @@ from market_data import get_price, get_option_chain_data
 
 
 def get_holdings() -> dict:
-    """Calculate net stock positions from all portfolio trades."""
+    """Calculate net stock positions from all portfolio trades.
+
+    Uses average cost basis method. Rounds cost to 2 decimal places
+    after each sell to prevent floating-point drift over many trades.
+    """
     holdings = {}
     for t in st.session_state.data["portfolio"]:
         tk = t["ticker"]
         if tk not in holdings:
-            holdings[tk] = {"shares": 0, "cost": 0}
+            holdings[tk] = {"shares": 0.0, "cost": 0.0}
         if t["type"] == "buy":
             holdings[tk]["shares"] += t["shares"]
-            holdings[tk]["cost"] += t["shares"] * t["price"]
+            holdings[tk]["cost"] += round(t["shares"] * t["price"], 2)
         else:
             # Reduce cost proportionally using average cost basis
             h = holdings[tk]
             sell_shares = min(t["shares"], h["shares"])
             if h["shares"] > 0:
                 avg_cost = h["cost"] / h["shares"]
-                h["cost"] -= sell_shares * avg_cost
-            h["shares"] -= sell_shares
+                h["cost"] = round(h["cost"] - sell_shares * avg_cost, 2)
+            h["shares"] = round(h["shares"] - sell_shares, 6)
+            # Clean up near-zero positions
+            if h["shares"] < 0.001:
+                h["shares"] = 0.0
+                h["cost"] = 0.0
     return {k: v for k, v in holdings.items() if v["shares"] > 0.001}
 
 

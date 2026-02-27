@@ -24,10 +24,28 @@ def compute_max_drawdown(cumulative_returns):
 
 
 def compute_var_historical(daily_returns, confidence=0.95, portfolio_val=100000.0):
-    """Historical Value at Risk (dollar amount)."""
+    """Historical Value at Risk.
+
+    Returns dict with both percentage and dollar VaR for clear reporting.
+    Daily returns should be decimal (e.g., -0.02 for a 2% loss).
+
+    Args:
+        daily_returns: Series of decimal daily returns.
+        confidence: Confidence level (default 0.95 = 95%).
+        portfolio_val: Current portfolio value in dollars.
+
+    Returns:
+        Dict with 'dollar' (VaR in $), 'percent' (VaR as decimal),
+        and 'confidence' (the confidence level used).
+    """
     if daily_returns.empty:
-        return 0.0
-    return float(abs(np.percentile(daily_returns, (1 - confidence) * 100)) * portfolio_val)
+        return {"dollar": 0.0, "percent": 0.0, "confidence": confidence}
+    var_pct = float(abs(np.percentile(daily_returns, (1 - confidence) * 100)))
+    return {
+        "dollar": round(var_pct * portfolio_val, 2),
+        "percent": round(var_pct * 100, 2),
+        "confidence": confidence,
+    }
 
 
 def build_portfolio_daily_returns(holdings, get_history_fn, starting_balance, get_price_fn=None):

@@ -1,6 +1,6 @@
 # DRIVER Framework: AI Tool Usage Documentation
 
-**Course:** MGMT 590 - Mastering AI For Finance | Purdue University
+**Course:** MGMT 69000 - Mastering AI For Finance | Purdue University
 **Student:** Naveed Aslam Perwez (naslam@purdue.edu)
 **Project:** Stock Portfolio Trading Simulator
 
@@ -24,7 +24,7 @@
 > **Iron Law:** No building without research first.
 
 ### Vision
-Build a full-featured stock portfolio trading simulator for MGMT 590 that integrates genuine AI/ML models — not just static rules or API passthroughs — while remaining fully functional on free-tier API keys.
+Build a full-featured stock portfolio trading simulator for MGMT 69000 that integrates genuine AI/ML models — not just static rules or API passthroughs — while remaining fully functional on free-tier API keys.
 
 ### Research & Discovery
 - **Market data APIs:** Evaluated FMP (structured, rate-limited at 250/day) vs yfinance (free, less reliable). Decision: FMP primary with yfinance fallback chain.
@@ -154,6 +154,7 @@ Build a full-featured stock portfolio trading simulator for MGMT 590 that integr
 - **Sentiment bias:** Confidence scores displayed alongside sentiment labels so users can assess reliability
 - **Model overconfidence:** ML regime detection shows probability-based signal_strength (0-1) and tiered confidence labels (High/Medium/Low)
 - **Data staleness:** All cached data has TTL (prices 60s, history 300s, financials 600s); manual "Refresh Prices" button clears all caches
+- **Label leakage in RF training:** Self-supervised labels are constructed from 10-day forward returns, which introduces a subtle form of look-ahead bias — the labels were only knowable after the prediction window elapsed. We mitigate this by (1) using TimeSeriesSplit to prevent chronological data leakage in train/test splits, (2) reporting CV accuracy honestly (35.5%, barely above 33.3% random baseline — no artificial inflation), and (3) blending RF at only 50% weight with HMM (no forward labels) and VADER (real-time). This is a fundamental limitation of self-supervised financial ML: truly "correct" labels don't exist until after the fact.
 
 ---
 

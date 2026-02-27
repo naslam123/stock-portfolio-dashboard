@@ -72,6 +72,10 @@ def get_top_movers(holdings: dict, get_price_fn, n: int = 3) -> tuple[list, list
 def get_triggered_alerts(watchlist: list, price_alerts: dict, get_price_fn) -> list[dict]:
     """Check which watchlist price alerts have been triggered.
 
+    Supports both upside and downside alerts. If the alert price is above
+    the stock's last close, it triggers when price >= alert. If below,
+    it triggers when price <= alert.
+
     Returns:
         List of {ticker, current_price, alert_price, direction}
     """
@@ -88,6 +92,13 @@ def get_triggered_alerts(watchlist: list, price_alerts: dict, get_price_fn) -> l
                     "current_price": price,
                     "alert_price": alert_price,
                     "direction": "above",
+                })
+            elif price <= alert_price:
+                triggered.append({
+                    "ticker": ticker,
+                    "current_price": price,
+                    "alert_price": alert_price,
+                    "direction": "below",
                 })
         except Exception:
             continue

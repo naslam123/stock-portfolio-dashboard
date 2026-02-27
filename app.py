@@ -1,7 +1,7 @@
 """
 Stock Portfolio Trading Simulator — Streamlit application.
 
-Main orchestrator for a 10-page trading simulator built for MGMT 590
+Main orchestrator for a 10-page trading simulator built for MGMT 69000
 (Mastering AI for Finance) at Purdue University. Features include:
 
 - Dashboard: Market overview, portfolio snapshot, sentiment, news
@@ -42,7 +42,8 @@ from risk_metrics import (
     compute_monte_carlo, compute_correlation_matrix,
 )
 from ai_signals import (
-    detect_market_regime, analyze_valuation,
+    detect_market_regime, detect_regime_hmm, score_sentiment_vader,
+    generate_composite_signal, analyze_valuation, compute_dcf_sensitivity,
     check_badges, generate_coaching_tips,
     compute_rsi, compute_macd, compute_bollinger,
     compute_option_payoff, BADGE_META, BADGE_DEFS,
@@ -89,12 +90,14 @@ def _snapshot_portfolio():
 if st.session_state.data.get("portfolio") or st.session_state.data.get("options"):
     _snapshot_portfolio()
 
-# Badge toast notifications for newly earned badges
+# Badge toast notifications — once earned, badges persist permanently
 current_badges = check_badges(st.session_state.data, portfolio_value=portfolio_value())
 prev_badges = st.session_state.data.get("badges", [])
-new_badges = [b for b in current_badges if b not in prev_badges]
-if new_badges:
-    st.session_state.data["badges"] = current_badges
+# Union: keep all previously earned + any newly earned (never revoke)
+all_earned = list(dict.fromkeys(prev_badges + current_badges))
+new_badges = [b for b in all_earned if b not in prev_badges]
+if new_badges or len(all_earned) != len(prev_badges):
+    st.session_state.data["badges"] = all_earned
     save_data(st.session_state.data)
     for b in new_badges:
         meta = BADGE_META.get(b, {})
@@ -103,7 +106,7 @@ if new_badges:
 # ==================== SIDEBAR ====================
 with st.sidebar:
     st.markdown(f"<h2 style='text-align:center; color:{TEXT};'>Trading Simulator</h2>", unsafe_allow_html=True)
-    st.caption("MGMT 590 | Purdue University")
+    st.caption("MGMT 69000 | Purdue University")
 
     st.divider()
 
@@ -1235,58 +1238,161 @@ elif page == "Research":
                 </div>
                 """, unsafe_allow_html=True)
 
-            # AI Signals Section
+            # AI Signals Section — Composite ML Signal
             st.divider()
             st.subheader("AI Signals")
 
-            sig_col1, sig_col2 = st.columns(2)
+            # Fetch news headlines for sentiment component
+            _news = get_stock_news(ticker, limit=8)
+            _headlines = [a["title"] for a in _news] if _news else []
 
-            with sig_col1:
-                st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>Market Regime</div>", unsafe_allow_html=True)
-                regime = detect_market_regime(df)
-                regime_color = GREEN if regime["regime"] == "Bullish" else RED if regime["regime"] == "Bearish" else YELLOW
-                model_badge = regime.get("model_type", "SMA")
-                model_color = BLUE if model_badge == "ML" else TEXT2
-                st.markdown(f"""
-                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div style="font-size:1.4rem; font-weight:bold; color:{regime_color};">{regime['regime']}</div>
-                        <div style="background:{model_color}20; color:{model_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold;">{model_badge} Model</div>
+            # Generate composite signal (RF + HMM + Sentiment)
+            composite = generate_composite_signal(df, _headlines if _headlines else None)
+            comp_color = GREEN if composite["signal"] == "Bullish" else RED if composite["signal"] == "Bearish" else YELLOW
+
+            # Composite Signal Header
+            st.markdown(f"""
+            <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-size:0.85rem; color:{TEXT2};">Composite ML Signal</div>
+                        <div style="font-size:1.6rem; font-weight:bold; color:{comp_color};">{composite['signal']} ({composite['score']:+.2f})</div>
                     </div>
-                    <div style="color:{TEXT2}; margin-top:4px;">Confidence: {regime['confidence']} | Strength: {regime['signal_strength']:.0%}</div>
-                    <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{regime['description']}</div>
+                    <div style="background:{comp_color}20; color:{comp_color}; padding:4px 12px; border-radius:8px; font-size:12px; font-weight:bold;">{composite['confidence']} Confidence</div>
+                </div>
+                <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{composite['description']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Component Breakdown — 3 columns
+            sig_col1, sig_col2, sig_col3 = st.columns(3)
+
+            # Component 1: Random Forest
+            rf = composite["components"]["rf"]
+            rf_color = GREEN if rf["score"] > 0.1 else RED if rf["score"] < -0.1 else YELLOW
+            with sig_col1:
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:0.8rem; font-weight:bold; color:{TEXT};">Random Forest</div>
+                        <div style="font-size:0.7rem; color:{TEXT2};">{composite['weights']['rf']:.0%} weight</div>
+                    </div>
+                    <div style="font-size:1.2rem; font-weight:bold; color:{rf_color}; margin-top:4px;">{rf['label']} ({rf['score']:+.2f})</div>
+                    <div style="color:{TEXT2}; font-size:11px; margin-top:4px;">{rf.get('confidence', 'N/A')} confidence{f" | CV acc: {rf['cv_accuracy']:.0%}" if rf.get('cv_accuracy') else ''}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
+            # Component 2: HMM Regime
+            hmm = composite["components"]["hmm"]
+            hmm_color = GREEN if hmm["score"] > 0.1 else RED if hmm["score"] < -0.1 else YELLOW
             with sig_col2:
-                st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-bottom:8px;'>DCF Valuation</div>", unsafe_allow_html=True)
-                analyst_data = get_analyst_data(ticker)
-                fin_data = get_financial_data(ticker)
-                shares_out = info.get("sharesOutstanding", 0) or 0
-                valuation = analyze_valuation(
-                    analyst_data,
-                    financial_data=fin_data if not fin_data.get("error") else None,
-                    stock_price=price,
-                    shares_outstanding=shares_out,
-                )
-                if valuation["signal"] != "N/A":
-                    val_color = GREEN if valuation["signal"] == "Undervalued" else RED if valuation["signal"] == "Overvalued" else YELLOW
-                    dcf_model = valuation.get("model_type", "FMP API")
-                    dcf_model_color = BLUE if dcf_model == "Custom DCF" else TEXT2
+                probs_str = ""
+                if hmm.get("probabilities"):
+                    p = hmm["probabilities"]
+                    probs_str = f"Bull {p.get('Bull',0):.0%} | Side {p.get('Sideways',0):.0%} | Bear {p.get('Bear',0):.0%}"
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:0.8rem; font-weight:bold; color:{TEXT};">HMM Regime</div>
+                        <div style="font-size:0.7rem; color:{TEXT2};">{composite['weights']['hmm']:.0%} weight</div>
+                    </div>
+                    <div style="font-size:1.2rem; font-weight:bold; color:{hmm_color}; margin-top:4px;">{hmm['label']} ({hmm['score']:+.2f})</div>
+                    <div style="color:{TEXT2}; font-size:11px; margin-top:4px;">{probs_str if probs_str else hmm['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Component 3: Sentiment
+            sent = composite["components"]["sentiment"]
+            sent_color = GREEN if sent["score"] > 0.05 else RED if sent["score"] < -0.05 else YELLOW
+            with sig_col3:
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div style="font-size:0.8rem; font-weight:bold; color:{TEXT};">VADER Sentiment</div>
+                        <div style="font-size:0.7rem; color:{TEXT2};">{composite['weights']['sentiment']:.0%} weight</div>
+                    </div>
+                    <div style="font-size:1.2rem; font-weight:bold; color:{sent_color}; margin-top:4px;">{sent['label']} ({sent['score']:+.2f})</div>
+                    <div style="color:{TEXT2}; font-size:11px; margin-top:4px;">{sent.get('num_headlines', 0)} headlines analyzed</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # --- DCF Valuation (full-width) ---
+            st.markdown(f"<div style='color:{TEXT}; font-weight:bold; font-size:1.1rem; margin-top:20px; margin-bottom:10px;'>DCF Valuation</div>", unsafe_allow_html=True)
+            analyst_data = get_analyst_data(ticker)
+            fin_data = get_financial_data(ticker)
+            shares_out = info.get("sharesOutstanding", 0) or 0
+            valuation = analyze_valuation(
+                analyst_data,
+                financial_data=fin_data if not fin_data.get("error") else None,
+                stock_price=price,
+                shares_outstanding=shares_out,
+                price_history=df,
+            )
+            if valuation["signal"] != "N/A":
+                val_color = GREEN if valuation["signal"] == "Undervalued" else RED if valuation["signal"] == "Overvalued" else YELLOW
+                dcf_model = valuation.get("model_type", "FMP API")
+                dcf_model_color = BLUE if dcf_model == "Custom DCF" else TEXT2
+                beta_val = valuation.get("beta")
+                tax_val = valuation.get("tax_rate")
+                wacc_val = valuation.get("wacc")
+                growth_val = valuation.get("growth_rate")
+                st.markdown(f"""
+                <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:12px; padding:20px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                        <div style="font-size:1.6rem; font-weight:bold; color:{val_color};">{valuation['signal']}</div>
+                        <div style="background:{dcf_model_color}20; color:{dcf_model_color}; padding:4px 12px; border-radius:8px; font-size:12px; font-weight:bold;">{dcf_model}</div>
+                    </div>
+                    <div style="display:flex; gap:24px; flex-wrap:wrap; margin-bottom:12px;">
+                        <div><span style="color:{TEXT2}; font-size:12px;">Intrinsic Value</span><br><span style="color:{TEXT}; font-size:1.2rem; font-weight:bold;">${valuation['dcf']:,.2f}</span></div>
+                        <div><span style="color:{TEXT2}; font-size:12px;">Market Price</span><br><span style="color:{TEXT}; font-size:1.2rem; font-weight:bold;">${price:,.2f}</span></div>
+                        <div><span style="color:{TEXT2}; font-size:12px;">Margin of Safety</span><br><span style="color:{val_color}; font-size:1.2rem; font-weight:bold;">{valuation['margin_of_safety']:+.1f}%</span></div>
+                        {"<div><span style='color:" + TEXT2 + "; font-size:12px;'>Beta</span><br><span style='color:" + TEXT + "; font-size:1.2rem; font-weight:bold;'>" + f"{beta_val}" + "</span></div>" if beta_val else ""}
+                        {"<div><span style='color:" + TEXT2 + "; font-size:12px;'>WACC</span><br><span style='color:" + TEXT + "; font-size:1.2rem; font-weight:bold;'>" + f"{wacc_val}%" + "</span></div>" if wacc_val else ""}
+                        {"<div><span style='color:" + TEXT2 + "; font-size:12px;'>Growth Rate</span><br><span style='color:" + TEXT + "; font-size:1.2rem; font-weight:bold;'>" + f"{growth_val}%" + "</span></div>" if growth_val else ""}
+                        {"<div><span style='color:" + TEXT2 + "; font-size:12px;'>Eff. Tax Rate</span><br><span style='color:" + TEXT + "; font-size:1.2rem; font-weight:bold;'>" + f"{tax_val}%" + "</span></div>" if tax_val else ""}
+                    </div>
+                    <div style="color:{TEXT2}; font-size:13px; border-top:1px solid {BORDER}; padding-top:10px;">{valuation['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # Sensitivity heatmap (growth rate × discount rate) — full width
+                sens = valuation.get("sensitivity")
+                if sens and sens.get("values"):
+                    st.markdown(f"<div style='color:{TEXT}; font-weight:bold; font-size:1.1rem; margin-top:20px; margin-bottom:10px;'>DCF Sensitivity Analysis (Growth Rate x WACC)</div>", unsafe_allow_html=True)
+                    sens_fig = go.Figure(data=go.Heatmap(
+                        z=sens["values"],
+                        x=[f"{d:.1f}%" for d in sens["discount_rates"]],
+                        y=[f"{g:.1f}%" for g in sens["growth_rates"]],
+                        colorscale=[
+                            [0, RED],
+                            [0.5, YELLOW],
+                            [1, GREEN],
+                        ],
+                        text=[[f"${v:,.0f}" for v in row] for row in sens["values"]],
+                        texttemplate="%{text}",
+                        textfont={"size": 11},
+                        hovertemplate="Growth: %{y}<br>WACC: %{x}<br>DCF/Share: $%{z:,.2f}<extra></extra>",
+                    ))
+                    sens_fig.update_layout(
+                        height=400,
+                        margin=dict(t=20, b=50, l=80, r=30),
+                        xaxis=dict(title="WACC (Discount Rate)", color=TEXT2, tickfont=dict(size=12)),
+                        yaxis=dict(title="Growth Rate", color=TEXT2, tickfont=dict(size=12)),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        plot_bgcolor="rgba(0,0,0,0)",
+                        font=dict(color=TEXT2),
+                    )
+                    st.plotly_chart(sens_fig, use_container_width=True)
                     st.markdown(f"""
-                    <div style="background:{BG2}; border:1px solid {BORDER}; border-radius:8px; padding:16px;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <div style="font-size:1.4rem; font-weight:bold; color:{val_color};">{valuation['signal']}</div>
-                            <div style="background:{dcf_model_color}20; color:{dcf_model_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold;">{dcf_model}</div>
-                        </div>
-                        <div style="color:{TEXT2}; margin-top:4px;">DCF: ${valuation['dcf']:,.2f} | Margin: {valuation['margin_of_safety']:+.1f}%</div>
-                        <div style="color:{TEXT2}; font-size:12px; margin-top:8px;">{valuation['description']}</div>
+                    <div style="background:{BG2}; border-left:3px solid {BLUE}; padding:10px 14px; border-radius:0 8px 8px 0; margin-top:-10px;">
+                        <span style="color:{TEXT}; font-size:13px;">Current price: <b>${price:,.2f}</b> — green cells indicate scenarios where the stock would be undervalued. The center of the matrix reflects the base-case assumptions (growth {growth_val if growth_val else 'N/A'}%, WACC {wacc_val if wacc_val else 'N/A'}%).</span>
                     </div>
                     """, unsafe_allow_html=True)
-                elif analyst_data.get("error") == "no_key":
-                    st.info("Add FMP_API_KEY in .streamlit/secrets.toml to enable DCF valuation.")
-                else:
-                    st.warning(f"DCF data unavailable. {analyst_data.get('error', 'FMP API may be rate-limited.')}")
+
+            elif analyst_data.get("error") == "no_key":
+                st.info("Add FMP_API_KEY in .streamlit/secrets.toml to enable DCF valuation.")
+            else:
+                st.warning(f"DCF data unavailable. {analyst_data.get('error', 'FMP API may be rate-limited.')}")
         else:
             st.warning(f"Unable to load price data for {ticker}. The API may be rate-limited — try again shortly.")
 
@@ -1366,7 +1472,43 @@ elif page == "Analytics":
             rc1, rc2, rc3 = st.columns(3)
             rc1.metric("Sharpe Ratio", f"{sharpe:.2f}")
             rc2.metric("Max Drawdown", f"{max_dd:.1%}")
-            rc3.metric("VaR (95%)", f"${var_95:,.0f}")
+            rc3.metric("VaR (95%)", f"${var_95['dollar']:,.0f}",
+                        help=f"{var_95['percent']:.2f}% daily loss at 95% confidence")
+
+            # "So What?" — actionable interpretation of risk metrics
+            interpretations = []
+            if sharpe < 0:
+                interpretations.append(f"<b>Sharpe Ratio: {sharpe:.2f}</b> (Negative) — Your portfolio is losing money relative to the risk taken. <i>Suggestion:</i> Reduce position sizes in your worst performers, consider shifting capital to defensive sectors (utilities, healthcare), or hold more cash until market conditions improve.")
+            elif sharpe < 0.5:
+                interpretations.append(f"<b>Sharpe Ratio: {sharpe:.2f}</b> (Below Average) — Risk-adjusted returns are weak. A passive S&P 500 index fund typically delivers 0.4-0.6. <i>Suggestion:</i> Evaluate whether your active trades are beating a simple buy-and-hold SPY strategy. If not, consider allocating a portion to index funds while keeping a smaller active trading allocation.")
+            elif sharpe < 1.0:
+                interpretations.append(f"<b>Sharpe Ratio: {sharpe:.2f}</b> (Good) — You are being compensated for the risk, but there is room to improve. <i>Suggestion:</i> Look for uncorrelated positions across different sectors to boost risk-adjusted returns without increasing total risk. Use the Correlation Heatmap below to identify diversification opportunities.")
+            else:
+                interpretations.append(f"<b>Sharpe Ratio: {sharpe:.2f}</b> (Excellent) — Strong risk-adjusted performance above 1.0. <i>Suggestion:</i> Maintain your current strategy discipline and avoid over-trading. Document what is working so you can replicate it.")
+
+            if max_dd > 0.20:
+                interpretations.append(f"<b>Max Drawdown: {max_dd:.1%}</b> (Severe) — You experienced a significant peak-to-trough decline. <i>Suggestion:</i> Implement stop-loss orders at 8-10% per position, reduce concentration in volatile holdings, and consider the Rebalancer to enforce target allocations. Professional fund managers target max drawdowns under 15-20%.")
+            elif max_dd > 0.10:
+                interpretations.append(f"<b>Max Drawdown: {max_dd:.1%}</b> (Moderate) — Within normal range but stay disciplined. <i>Suggestion:</i> Set price alerts on your largest positions to catch downtrends early. Review your sector allocation for over-concentration.")
+            else:
+                interpretations.append(f"<b>Max Drawdown: {max_dd:.1%}</b> (Well-Controlled) — Good risk management. <i>Suggestion:</i> Your drawdown discipline is working. If you want to increase returns, you may have room to take slightly more risk while staying within your comfort zone.")
+
+            var_dollar = var_95['dollar']
+            var_pct_of_portfolio = var_dollar / total * 100 if total > 0 else 0
+            if var_pct_of_portfolio > 5:
+                interpretations.append(f"<b>Daily VaR (95%): ${var_dollar:,.0f}</b> ({var_pct_of_portfolio:.1f}% of portfolio, High) — On a bad day, you could lose this amount with 95% confidence. <i>Suggestion:</i> Apply the 2% rule — no single position should risk more than 2% of total portfolio. Use the Monte Carlo simulation below to visualize tail-risk scenarios and consider trimming your most volatile positions.")
+            elif var_pct_of_portfolio > 2:
+                interpretations.append(f"<b>Daily VaR (95%): ${var_dollar:,.0f}</b> ({var_pct_of_portfolio:.1f}% of portfolio, Moderate) — A manageable level of daily risk exposure. <i>Suggestion:</i> If this exceeds your personal comfort level, diversify across uncorrelated sectors. Check the Correlation Heatmap to find positions that move independently.")
+            else:
+                interpretations.append(f"<b>Daily VaR (95%): ${var_dollar:,.0f}</b> ({var_pct_of_portfolio:.1f}% of portfolio, Conservative) — Well within typical risk tolerance. <i>Suggestion:</i> Your risk exposure is low. If seeking higher returns, you could selectively add growth positions while monitoring that VaR stays within your comfort zone.")
+
+            st.markdown(f"<div style='color:{TEXT}; font-weight:bold; margin-top:12px; margin-bottom:4px;'>What This Means For You</div>", unsafe_allow_html=True)
+            for interp in interpretations:
+                st.markdown(f"""
+                <div style="background:{BG2}; border-left:3px solid {BLUE}; padding:10px 14px; margin-bottom:6px; border-radius:0 8px 8px 0;">
+                    <span style="color:{TEXT}; font-size:13px;">{interp}</span>
+                </div>
+                """, unsafe_allow_html=True)
         else:
             st.info("Need at least 50 days of history for risk metrics.")
 
@@ -1449,7 +1591,24 @@ elif page == "Analytics":
 
         # AI Coaching Tips
         st.subheader("AI Trading Coach")
-        tips, tips_source = generate_coaching_tips(st.session_state.data, holdings)
+        # Gather regime + risk context for enriched coaching
+        _coach_regime = None
+        if not spy.empty:
+            try:
+                _coach_regime = detect_market_regime(spy)
+            except Exception:
+                pass
+        _coach_risk = {}
+        if not portfolio_returns.empty:
+            _coach_risk = {
+                "var": var_95,
+                "sharpe": sharpe,
+                "max_drawdown": max_dd * 100,
+            }
+        tips, tips_source = generate_coaching_tips(
+            st.session_state.data, holdings,
+            regime=_coach_regime, risk_metrics=_coach_risk,
+        )
         source_color = BLUE if tips_source == "LLM" else TEXT2
         st.markdown(f"""
         <div style="display:inline-block; background:{source_color}20; color:{source_color}; padding:2px 8px; border-radius:8px; font-size:11px; font-weight:bold; margin-bottom:8px;">
@@ -1770,4 +1929,4 @@ elif page == "Settings":
 
 # Footer
 st.divider()
-st.caption("Financial Modeling Prep + Yahoo Finance (fallback) | MGMT 590 | Purdue")
+st.caption("Financial Modeling Prep + Yahoo Finance (fallback) | MGMT 69000 | Purdue")

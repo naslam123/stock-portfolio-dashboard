@@ -140,7 +140,36 @@ def analyze_sentiment_batch(headlines: tuple) -> list[dict]:
 
     prompt = _build_sentiment_prompt(headlines)
 
-    # Try Groq first
+    def _parse_sentiment(text):
+        """Extract JSON sentiment array from LLM response."""
+        start = text.find("[")
+        end = text.rfind("]") + 1
+        if start >= 0 and end > start:
+            parsed = json.loads(text[start:end])
+            if len(parsed) == len(headlines):
+                return parsed
+        return None
+
+    # Try OpenAI first (reliable, cheap)
+    openai_key = _get_key("OPENAI_API_KEY")
+    if openai_key:
+        try:
+            from openai import OpenAI
+
+            client = OpenAI(api_key=openai_key)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300,
+                temperature=0.1,
+            )
+            result = _parse_sentiment(resp.choices[0].message.content.strip())
+            if result:
+                return result
+        except Exception:
+            pass
+
+    # Fallback to Groq (free)
     groq_key = _get_key("GROQ_API_KEY")
     if groq_key:
         try:
@@ -153,17 +182,13 @@ def analyze_sentiment_batch(headlines: tuple) -> list[dict]:
                 max_tokens=300,
                 temperature=0.1,
             )
-            text = resp.choices[0].message.content.strip()
-            start = text.find("[")
-            end = text.rfind("]") + 1
-            if start >= 0 and end > start:
-                parsed = json.loads(text[start:end])
-                if len(parsed) == len(headlines):
-                    return parsed
+            result = _parse_sentiment(resp.choices[0].message.content.strip())
+            if result:
+                return result
         except Exception:
             pass
 
-    # Fallback to Gemini
+    # Last resort: Gemini
     gemini_key = _get_key("GEMINI_API_KEY")
     if gemini_key:
         try:
@@ -172,13 +197,9 @@ def analyze_sentiment_batch(headlines: tuple) -> list[dict]:
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel("gemini-2.0-flash")
             resp = model.generate_content(prompt)
-            text = resp.text.strip()
-            start = text.find("[")
-            end = text.rfind("]") + 1
-            if start >= 0 and end > start:
-                parsed = json.loads(text[start:end])
-                if len(parsed) == len(headlines):
-                    return parsed
+            result = _parse_sentiment(resp.text.strip())
+            if result:
+                return result
         except Exception:
             pass
 
