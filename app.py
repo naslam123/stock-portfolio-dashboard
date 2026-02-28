@@ -165,6 +165,9 @@ with st.sidebar:
             default_idx = 0
     page = st.radio("Navigation", nav_options, index=default_idx, label_visibility="collapsed")
 
+    st.divider()
+    st.caption("⚠️ **Disclaimer:** This is a simulated trading platform for educational purposes only. No real money is involved. The developers assume no responsibility for any financial decisions, losses, or gains arising from the use of this tool or its outputs.")
+
 # Dialog state
 if "show_confirm" not in st.session_state:
     st.session_state.show_confirm = False
